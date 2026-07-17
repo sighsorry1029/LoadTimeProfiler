@@ -47,7 +47,7 @@ internal static class LifecyclePatches
 
         if (!dedicatedServer && target.PreparesDeepLobbyAttribution)
         {
-            DeepLobbyAttributionProfiler.PrepareForActiveSession();
+            DeepLobbyAttributionProfiler.PrepareForActiveSession(method);
         }
 
         LifecyclePhaseProfiler.BeginTarget(method, target.Label);
@@ -123,7 +123,8 @@ internal static class LifecyclePatches
             "FejdStartup.JoinServer",
             connection: true,
             beginsConnection: true,
-            restartsConnection: true);
+            restartsConnection: true,
+            preparesDeepLobbyAttribution: true);
         Add(
             targets,
             typeof(FejdStartup),

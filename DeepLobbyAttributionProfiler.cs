@@ -43,7 +43,7 @@ internal static class DeepLobbyAttributionProfiler
         _activeCallbacks?.Clear();
     }
 
-    internal static void PrepareForActiveSession()
+    internal static void PrepareForActiveSession(MethodBase? activePreparationMethod = null)
     {
         if (!LoadTimeProfilerPatcher.ProfilingEnabled)
         {
@@ -53,7 +53,7 @@ internal static class DeepLobbyAttributionProfiler
         long started = Stopwatch.GetTimestamp();
         HashSet<MethodBase> blockedMethods = LoadTimeProfilerPatcher.IsDedicatedServer
             ? new HashSet<MethodBase>()
-            : GetCurrentMethodBlocklist();
+            : GetCurrentMethodBlocklist(activePreparationMethod);
         PluginResolver resolver = PluginResolver.Create();
         HashSet<MethodBase> seenCandidates = new();
         int installed = 0;
@@ -331,19 +331,18 @@ internal static class DeepLobbyAttributionProfiler
         }
     }
 
-    private static HashSet<MethodBase> GetCurrentMethodBlocklist()
+    private static HashSet<MethodBase> GetCurrentMethodBlocklist(MethodBase? activeMethod)
     {
         HashSet<MethodBase> blocked = new();
-        MethodBase? onWorldStart = AccessTools.Method(typeof(FejdStartup), nameof(FejdStartup.OnWorldStart));
-        if (onWorldStart == null)
+        if (activeMethod == null)
         {
             return blocked;
         }
 
-        blocked.Add(onWorldStart);
+        blocked.Add(activeMethod);
         try
         {
-            Patches? patchInfo = Harmony.GetPatchInfo(onWorldStart);
+            Patches? patchInfo = Harmony.GetPatchInfo(activeMethod);
             if (patchInfo != null)
             {
                 foreach (Patch patch in EnumerateInvocationPatches(patchInfo))

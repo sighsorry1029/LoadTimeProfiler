@@ -14,7 +14,7 @@ namespace LoadTimeProfiler;
 public static class LoadTimeProfilerPatcher
 {
     internal const string ModName = "LoadTimeProfiler";
-    internal const string ModVersion = "1.0.0";
+    internal const string ModVersion = "1.0.1";
     internal const string Author = "sighsorry";
     internal const string ModGUID = Author + ".LoadTimeProfiler";
 

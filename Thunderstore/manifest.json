@@ -1,6 +1,6 @@
 {
     "name":  "LoadTimeProfiler",
-    "version_number":  "1.0.0",
+    "version_number":  "1.0.1",
     "website_url":  "https://discord.gg/jkcJCq2sK5",
     "description":  "Profiles mod loading times during game startup, world loading, and dedicated server boot. Creates clear per-mod reports and keeps the latest 10 runs for easy comparison.",
     "dependencies":  [
