@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.2
+
+- Added observation-only spawn-readiness diagnostics for the interval between `_RequestRespawn` activation and `SpawnPlayer`, plus connection-wide minimap call timing.
+- Separately reports the built-in logout/custom-spawn gate, target-zone readiness, active-area readiness, and `IsAreaReady` completion.
+- Samples known 3x3 spawn-sector ZDO totals and uninstantiated valid objects periodically at no more than 1 Hz, plus a terminal readiness sample, without changing loading behavior.
+- Reports minimap cache hits, misses, and inclusive `GenerateWorldMap` call time relative to respawn activation so map regeneration can be distinguished from spawn-area loading.
+- Keeps the diagnostics always on with the existing master switch, buffers samples in memory without per-sample disk writes, and reports a lower bound for measured diagnostic work.
+
 ## 1.1.1
 
 - Replaced the per-feature settings with one `General.Enabled` master switch and automatically removes the retired settings from existing config files.

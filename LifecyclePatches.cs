@@ -55,6 +55,11 @@ internal static class LifecyclePatches
             TimelineProfiler.MarkConnection(target.Label);
         }
 
+        if (!dedicatedServer && target.CompletesConnection)
+        {
+            SpawnReadinessProfiler.ObserveSpawnPlayerStarted();
+        }
+
         if (!dedicatedServer && target.PreparesDeepLobbyAttribution)
         {
             DeepLobbyAttributionProfiler.PrepareForActiveSession(method);
@@ -91,6 +96,8 @@ internal static class LifecyclePatches
 
         if (!dedicatedServer && target.CompletesConnection)
         {
+            SpawnReadinessProfiler.ObserveSpawnPlayerCompleted(
+                exception);
             if (exception == null)
             {
                 TimelineProfiler.CompleteConnection(target.Label + " local player ready");

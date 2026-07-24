@@ -87,6 +87,7 @@ internal static class TimelineProfiler
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Connection);
         DeepLobbyAttributionProfiler.ResetSession();
         StartupAcceleration.ResetSession(ProfileSession.Connection);
+        SpawnReadinessProfiler.ResetSession();
         lock (Lock)
         {
             double now = NowMilliseconds();
@@ -266,6 +267,11 @@ internal static class TimelineProfiler
             snapshot = state.Complete(now, result);
         }
 
+        if (snapshot.Session == ProfileSession.Connection)
+        {
+            SpawnReadinessProfiler.CloseSession();
+        }
+
         StringBuilder builder = new();
         builder.AppendLine($"=== {snapshot.Name} ===");
         builder.AppendLine($"Result: {snapshot.Result}");
@@ -278,6 +284,11 @@ internal static class TimelineProfiler
         Dictionary<string, double> lifecycleExecutionTimes =
             LifecyclePhaseProfiler.SnapshotSingleExecutionTimes(snapshot.Session);
         AppendMilestoneIntervals(builder, snapshot.Milestones, lifecycleExecutionTimes);
+        if (snapshot.Session == ProfileSession.Connection)
+        {
+            SpawnReadinessProfiler.AppendReport(builder);
+        }
+
         StartupAcceleration.AppendReport(builder, snapshot.Session);
         ConnectionStability.AppendReport(builder, snapshot.Session);
         if (snapshot.Session == ProfileSession.Startup)

@@ -12,6 +12,7 @@ It starts before normal BepInEx plugins and writes an easy-to-read timing report
 - Shows how much time individual mods spend during plugin setup, including construction, `Awake`, `OnEnable`, and `Start`.
 - Shows per-mod synchronous work during the important `ZNetScene.Awake` and `ObjectDB.Awake` loading stages.
 - Records a timeline of major Valheim loading stages, making long pauses easier to spot.
+- Separates the final spawn wait into the built-in respawn gate, target-zone readiness, locally known valid ZDOs still lacking instantiated scene objects, and minimap cache or generation calls.
 - Keeps the latest 10 reports so you can compare runs before and after changing your mod list.
 - Caches localization CSV work without replacing Valheim's active translation dictionary or suppressing other mods' localization callbacks.
 - Coalesces only automatic BepInEx config writes during `Chainloader.Start`; explicit saves and each plugin's `SaveOnConfigSet` policy remain intact.
@@ -101,9 +102,16 @@ Connection protection is local. Install the same build on both endpoints when yo
 - **Localization CSV acceleration** reports cache hits, misses, replay time, and uncached parse time for the active phase.
 - **Connection outcome** separates normal connection time, time to the first failure decision, and the later return-to-lobby/error-display time.
 - **Connection stability** reports the fixed 90-second protection targets, preserved fragment behavior, installation time, and compatibility warnings.
+- **Spawn readiness diagnostics** separates the built-in respawn gate, zone and active-area readiness, locally known spawn-sector ZDO state, and minimap cache or generation work.
 - **Unattributed time** is work that cannot be safely assigned to one mod.
 
 The slowest entries are useful investigation targets. They are not automatic proof that a mod is broken; manager mods such as Jotunn may perform work on behalf of several other mods.
+
+For spawn-readiness diagnostics, `Target center zone first observed loaded` means the center zone around the current spawn target was observed as loaded. `Active area first observed loaded` is Valheim's broader active-area check. If `zoneLoaded=no` persists, the client is still waiting on target-zone readiness. If `zoneLoaded=yes` while `missing` falls toward zero before `IsAreaReady first true`, the remaining wait is consistent with locally known ZDOs receiving scene instances.
+
+The 3x3 ZDO counts include only objects already known to the local client; `uninstantiated valid` means valid received ZDO data did not yet have a local `ZNetView` instance. A zero value does not prove that the server has no additional objects still in transit.
+
+Minimap call detail is labeled relative to `_RequestRespawn` activation. A cache miss followed by `GenerateWorldMap calls: count=1` identifies the full map-generation path; its reported total is inclusive call time. These calls and the zone/ZDO readiness intervals can overlap.
 
 ## Example Report
 
@@ -196,3 +204,5 @@ LoadTimeProfiler safely assigns synchronous work that it can observe. Network wa
 Acceleration statistics describe work observed or coalesced in the current run; they are not a synthetic estimate of total time saved. Compare several runs with identical mod, world, and endpoint conditions.
 
 Connection timing begins when `FejdStartup.TransitionToMainScene` accepts the world transition, so pre-connection login, permission, warning, and selection prompts are not counted as a hanging connection attempt. Success reuses the existing `Game.SpawnPlayer` completion timestamp. Failure stores `Game.Logout` as a candidate timestamp and confirms it from the terminal status shown by `FejdStartup.ShowConnectError`; a benign return to the lobby is reported as cancelled. This event-based measurement does not poll connection state each frame.
+
+Spawn-readiness diagnostics are observation-only. Periodic sampling is limited to at most once per second, with an additional terminal sample when readiness completes. Counts cover only ZDOs already known locally in the target 3x3 sector area; they do not represent objects that may still be in transit from a remote server. Zone milestones therefore have up to roughly one second of sampling resolution. Zone, active-area, ZDO, and minimap timings can overlap and should not be added together.

@@ -35,6 +35,10 @@ internal static class RuntimeHookInstaller
             }
 
             PatchLifecycleTargets(ref installed, ref failed);
+            SpawnReadinessProfiler.Install(
+                Harmony,
+                ref installed,
+                ref failed);
             ProfilerLog.WriteLine(
                 $"Unity and Valheim runtime hook installation completed: installed={installed}, failed={failed}.");
         }
