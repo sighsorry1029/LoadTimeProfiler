@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.6
+
+- Removed the 1.1.5 per-callback `FejdStartup.Awake` instrumentation after its Harmony detours could trigger a native Mono crash immediately after BepInEx chainloader startup.
+- Retains the safe inclusive `FejdStartup.Awake` lifecycle timing and the 1.1.5 AzuAntiCheat prehash and FastAssetBundleLoader hash diagnostics.
+
 ## 1.1.5
 
 - Added an exact-version AzuAntiCheat 4.3.11 integration that starts same-launch per-plugin SHA-256 work on one below-normal background worker while BepInEx continues loading plugins.

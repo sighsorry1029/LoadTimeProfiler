@@ -50,7 +50,6 @@ internal static class TimelineProfiler
         ChainloaderProfiler.ResetSession();
         StartupAcceleration.ResetSession(ProfileSession.Startup);
         FastAssetBundleHashProfiler.ResetSession(ProfileSession.Startup);
-        FejdStartupAttributionProfiler.ResetSession();
         if (dedicatedServer)
         {
             DeepLobbyAttributionProfiler.ResetSession();
@@ -405,12 +404,6 @@ internal static class TimelineProfiler
                 LoadTimeProfilerPatcher.IsDedicatedServer)
             {
                 DeepLobbyAttributionProfiler.AppendReport(builder);
-            }
-
-            if (snapshot.Session == ProfileSession.Startup &&
-                !LoadTimeProfilerPatcher.IsDedicatedServer)
-            {
-                FejdStartupAttributionProfiler.AppendReport(builder);
             }
         }
 

@@ -89,7 +89,6 @@
     <Compile Include="LifecyclePhaseProfiler.cs" />
     <Compile Include="LifecyclePatches.cs" />
     <Compile Include="DeepLobbyAttributionProfiler.cs" />
-    <Compile Include="FejdStartupAttributionProfiler.cs" />
     <Compile Include="StartupAcceleration.cs" />
     <Compile Include="LocalizationAcceleration.cs" />
     <Compile Include="AzuAntiCheatPrehashAcceleration.cs" />

@@ -107,17 +107,6 @@ public static class RuntimeEntrypoint
                 "Connection stability integration failed: " + ex.Message);
         }
 
-        try
-        {
-            FejdStartupAttributionProfiler.PrepareAfterChainloader();
-        }
-        catch (Exception ex)
-        {
-            ProfilerLog.WriteLine(
-                "FejdStartup attribution preparation failed open: " +
-                ex);
-        }
-
         if (prepareServerAttribution)
         {
             try

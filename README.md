@@ -10,7 +10,7 @@ It starts before normal BepInEx plugins and writes an easy-to-read timing report
 - Measures the trip from the lobby to a playable world.
 - Measures dedicated server startup until the server is ready.
 - Shows how much time individual mods spend during plugin setup, including construction, `Awake`, `OnEnable`, and `Start`.
-- Shows per-mod synchronous Harmony callback time inside `FejdStartup.Awake`, without scanning unrelated methods.
+- Measures the inclusive `FejdStartup.Awake` lifecycle stage without repatching third-party callbacks.
 - Shows per-mod synchronous work during the important `ZNetScene.Awake` and `ObjectDB.Awake` loading stages.
 - Starts AzuAntiCheat 4.3.11's per-plugin SHA-256 work in one background worker as plugin DLLs become available, then revalidates each same-launch result before use.
 - Measures only FastAssetBundleLoader's original-source bundle hashing during startup; cache-output verification hashes are excluded.
@@ -100,7 +100,7 @@ Connection protection is local. Install the same build on both endpoints when yo
 - **Plugin Start** shows measured work from plugin `Start` methods.
 - **AzuAntiCheat asynchronous prehash** shows background completion, main-thread wait, verified hits, invalidations, and synchronous fallbacks.
 - **FastAssetBundleLoader original-source hashing** shows call count, bytes, total time, and the slowest original bundle hashes.
-- **Scoped FejdStartup.Awake attribution** shows synchronous Harmony callback time assigned to mods and reports its own setup/bookkeeping cost separately.
+- **Lifecycle phases** includes the safe, inclusive `FejdStartup.Awake` duration.
 - **Timeline** shows the order and duration of major Valheim loading stages.
 - **Scoped deep attribution** shows synchronous Harmony callback time assigned to mods during `ZNetScene.Awake` and `ObjectDB.Awake`.
 - **Startup acceleration** reports safe localization-cache and automatic config-write activity.

@@ -62,7 +62,6 @@ internal static class LifecyclePatches
             DeepLobbyAttributionProfiler.PrepareForActiveSession(method);
         }
 
-        FejdStartupAttributionProfiler.BeginTarget(method);
         LifecyclePhaseProfiler.BeginTarget(method, target.Label);
         DeepLobbyAttributionProfiler.BeginTarget(method);
     }
@@ -78,7 +77,6 @@ internal static class LifecyclePatches
 
         DeepLobbyAttributionProfiler.EndTarget(method);
         LifecyclePhaseProfiler.EndTarget(method);
-        FejdStartupAttributionProfiler.EndTarget(method);
 
         bool dedicatedServer = LoadTimeProfilerPatcher.IsDedicatedServer;
         bool completesStartup = !dedicatedServer && target.CompletesStartup ||
