@@ -1,0 +1,65 @@
+﻿godmode_detected: Godmode erkannt
+godmode_detected_message_discord: Client hat den Cheat für den God Mode aktiviert
+fly_detected: Flugmodus erkannt
+fly_detected_message_discord: Der Client hat den Cheat für den Flugmodus aktiviert
+nocost_detected: No Cost Cheat erkannt
+nocost_detected_message_discord: Der Client hat den Cheat für No Cost aktiviert.
+freefly_detected: Freefly Cheat erkannt
+freefly_detected_message_discord: Der Client hat den Cheat für den Freefly-Kameramodus aktiviert
+ghostmode_detected: Ghost Cheat erkannt
+ghostmode_detected_message_discord: Der Client hat den Cheat für den Geistermodus aktiviert.
+carryweight_detected: Überschreitung des zulässigen Tragegewichts
+carryweight_detected_message_discord: >-
+  Das Tragegewicht des Spielers hat das Limit von {carryLimit} überschritten. Es ist derzeit
+health_cheat_detected: Gesundheitslimit überschritten
+health_cheat_detected_message_discord: >-
+  Die Gesundheit des Spielers hat die Grenze von {healthLimit} überschritten. Sie beträgt derzeit
+stamina_cheat_detected: Gesundheit Grenzwertüberschreitung
+stamina_cheat_detected_message_discord: >-
+  Die Ausdauer des Spielers hat das Limit von {staminaLimit} überschritten. Sie ist derzeit
+fly_cheat_active: >-
+  Der Spieler wurde beim aktiven Fliegen entdeckt.
+exploremap_cheat_message: Alles erforschen (Karte)
+exploremap_cheat_message_discord: >-
+  Der Spieler hat versucht, den Cheat "Alles erforschen (Karte)" zu benutzen.
+  Diese Aktion wurde verhindert.
+cheat_detected: CHEAT ERKANNT
+cheat_engine_detected: Cheat-Engine erkannt
+nowebhook_cheat_detected: >-
+  Ein Cheat wurde erkannt, aber es wurde kein Webhook eingerichtet. Es wird nichts in Discord gepostet. Die Verbindung des Spielers wird unterbrochen.
+  Bitte richten Sie einen Webhook in der Datei AzuAntiCheat_Webhook.yml ein, die sich im Konfigurationsordner des Servers befindet.
+carryweight_cheat_message: Geändertes Carryweight
+chat_cheat_message: Gekickt für den Versuch, einen Cheat über den Chat zu benutzen
+connect_error_message: >-
+  Dir fehlen Mods, die der Server benötigt.
+
+  Bitte überprüfe das mit deinen Admins, lies den Fehler in deinem Log, oder lade das Paket erneut herunter
+console_cheat_message: Gekickt für den Versuch, einen Cheat über die Konsole zu benutzen
+damage_cheat_message: Du wurdest gekickt; Massiver Schaden entdeckt.
+exploreall_cheat_message: Du wurdest gekickt; Du hast versucht, den ExploreAll (Map) Cheat zu benutzen.
+fly_cheat_message: Fliegen
+fly2_cheat_message: Fliegend
+freefly_cheat_message: Freiflug-Kameramodus
+ghostmode_cheat_message: Geistermodus
+godmode_cheat_message: Gott-Modus
+health_cheat_message: Modifizierte Gesundheit
+moderator_connect_error_message: >-
+  Dir fehlen Mods, die der Server benötigt.
+
+  Moderatoren können zusätzliche Mods haben, müssen aber trotzdem alle erforderlichen haben.
+nocost_cheat_message: Keine Baukosten
+stamina_cheat_message: Modifizierte Ausdauer
+banned_mods_message: Du wurdest gekickt; Verbotene Mods entdeckt (Nicht auf der Whitelist oder Greylist)
+non_whitelisted_mods_clientmessage: Du wurdest gekickt; Nicht auf der Whitelist stehende oder unpassende Mods wurden entdeckt
+non_whitelisted_mods_discord_message: Nicht auf der Whitelist stehende/unpassende Mod(s) gefunden
+missing_mods_clientmessage: Du wurdest gekickt; fehlende oder unpassende Mod(s) entdeckt
+missing_mods_discord_message: Fehlende/inkongruente Mod(s) gefunden
+steam_name: Steam Name
+steam_id: Steam ID
+player_name: Spielername
+player_location: Spieler-Standort
+player_world: Spieler-Welt
+additional_info: Zusätzliche Informationen
+server_name: Name des Servers
+azu_ban: Verbot
+azu_kick: Kick

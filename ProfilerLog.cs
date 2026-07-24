@@ -41,6 +41,10 @@ internal static class ProfilerLog
                     ? "Coverage: BepInEx plugin construction/Awake/OnEnable, plugin Start methods, dedicated server lifecycle execution, and milestone intervals."
                     : "Coverage: BepInEx plugin construction/Awake/OnEnable, plugin Start methods, selected client lifecycle execution, and milestone intervals.");
                 _writer.WriteLine("Deep attribution instruments existing synchronous Harmony callbacks in ObjectDB.Awake and ZNetScene.Awake.");
+                _writer.WriteLine(
+                    "Startup acceleration: safe localization cache and config write coalescing enabled.");
+                _writer.WriteLine(
+                    "Connection stability: minimal fixed 90-second timeout floor; fragment cache behavior unchanged.");
                 _writer.WriteLine();
             }
             catch (Exception ex)

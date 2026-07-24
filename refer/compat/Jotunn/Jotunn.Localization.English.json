@@ -1,0 +1,23 @@
+﻿{
+  "mod_compat_header_failed_connection": "Failed Connection:",
+  "mod_compat_header_remote_version": "Remote Version (the Server):",
+  "mod_compat_header_local_version": "Local Version (this Game):",
+  "mod_compat_header_valheim_version": "Valheim Version Error:",
+  "mod_compat_header_missing_mods": "Missing Mods:",
+  "mod_compat_header_update_needed": "Mod Updates Needed:",
+  "mod_compat_header_downgrade_needed": "Mod Downgrades Needed:",
+  "mod_compat_header_additional_mods": "Additional Mods Loaded:",
+  "mod_compat_header_further_steps": "Further Steps:",
+  "mod_compat_valheim_version_error_description": "The server is running Valheim with network version $1, while your game is running Valheim with network version $2",
+  "mod_compat_valheim_version_upgrade": "Please update your game",
+  "mod_compat_valheim_version_downgrade": "Please downgrade your game",
+  "mod_compat_further_steps_description": "This version check only applies for mods using Jötunn. Please check both server and client log files from 'BepInEx/LogOutput.log' for other possible disconnects",
+  "mod_compat_mod_update": "Please update $1 to version $2",
+  "mod_compat_mod_downgrade": "Please downgrade $1 to version $2",
+  "mod_compat_missing_mods_description": "Please install the following mods",
+  "mod_compat_additional_mods_description": "Please contact your server admin or uninstall the following mods",
+  "mod_compat_missing_mod": "$1 $2 was not loaded on your game",
+  "mod_compat_additional_mod": "$1 $2 was not loaded on the server",
+  "mod_compat_open_log_file": "Open Log Folder",
+  "mod_compat_troubleshooting": "Troubleshooting"
+}

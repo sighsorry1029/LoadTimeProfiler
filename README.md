@@ -1,8 +1,8 @@
 # LoadTimeProfiler
 
-Profiles mod loading times during game startup, world loading, and dedicated server boot. Creates clear per-mod reports and keeps the latest 10 runs for easy comparison.
+Profiles and safely accelerates modded Valheim startup, world loading, and dedicated server boot. It also adds targeted timeout protection for large synchronization payloads during slow world joins.
 
-It starts before normal BepInEx plugins and writes an easy-to-read timing report for each launch. It does not change gameplay, items, worlds, or server settings.
+It starts before normal BepInEx plugins and writes an easy-to-read timing report for each launch. It does not change gameplay content, items, or world data. One master switch controls profiling, safe startup acceleration, and minimal connection protection together.
 
 ## Features
 
@@ -13,6 +13,10 @@ It starts before normal BepInEx plugins and writes an easy-to-read timing report
 - Shows per-mod synchronous work during the important `ZNetScene.Awake` and `ObjectDB.Awake` loading stages.
 - Records a timeline of major Valheim loading stages, making long pauses easier to spot.
 - Keeps the latest 10 reports so you can compare runs before and after changing your mod list.
+- Caches localization CSV work without replacing Valheim's active translation dictionary or suppressing other mods' localization callbacks.
+- Coalesces only automatic BepInEx config writes during `Chainloader.Start`; explicit saves and each plugin's `SaveOnConfigSet` policy remain intact.
+- Applies a fixed 90-second floor to vanilla ZRpc, Jotunn, and known ServerSync/AzuAntiCheat send-queue waits without shortening longer original limits.
+- Leaves fragment-cache behavior unchanged and avoids broad compatibility scans on the connection path.
 - Works on clients and dedicated servers without DataForge or ServerSync.
 
 ### Manual Installation
@@ -42,6 +46,30 @@ Each report is named with its launch date and time. Up to 10 reports are stored 
 
 Compare several runs before deciding that one mod is slow. Loading time can change because of disk cache, network conditions, world size, and other programs running on the computer.
 
+## Configuration
+
+The configuration file is:
+
+```text
+BepInEx/config/sighsorry.LoadTimeProfiler.cfg
+```
+
+There is one setting:
+
+- `General.Enabled = true` enables timing reports, the safe localization cache, Chainloader-scoped config-write coalescing, and minimal connection protection. Set it to `false` to disable all LoadTimeProfiler runtime hooks and report-file creation. Changes apply on the next launch.
+
+Connection protection uses a fixed 90-second floor. Existing limits longer than 90 seconds are preserved, and fragment-cache lifetimes are not changed. Previous per-feature settings are removed automatically when the configuration is next loaded.
+
+Config coalescing delays only automatic BepInEx writes until `Chainloader.Start` ends. Explicit saves and each plugin's `SaveOnConfigSet` policy remain intact. LoadTimeProfiler automatically keeps original save behavior when another Harmony owner patches `ConfigFile.Save`.
+
+## Incompatibilities
+
+- Smoothbrain-StartupAccelerator
+- MSchmoecker-LocalizationCache
+- MSchmoecker-TimeoutLimit
+
+Connection stability cannot guarantee success when the peer is offline, versions are incompatible, a mod coroutine never finishes, the network drops packets indefinitely, or an incomplete fragment expires under the original mod behavior. The minimal layer only prevents known 30-second ZRpc and send-queue limits from ending an otherwise healthy transfer too early.
+
 ## Dedicated Server Behavior
 
 Install the same `LoadTimeProfiler.dll` in the dedicated server's own `BepInEx/patchers` folder. No client installation is required to measure the server itself.
@@ -61,12 +89,18 @@ BepInEx/config/LoadTimeProfiler
 
 Server reports are not sent to connected players. Installing LoadTimeProfiler only on a client measures that client, while installing it only on the dedicated server measures the server. The server also keeps only its newest 10 reports.
 
+Connection protection is local. Install the same build on both endpoints when you want the fixed protection available for both server-to-client and client-to-server synchronization queues.
+
 ## Reading The Report
 
 - **Plugin construction/Awake/OnEnable** shows time spent while BepInEx creates and enables each plugin.
 - **Plugin Start** shows measured work from plugin `Start` methods.
 - **Timeline** shows the order and duration of major Valheim loading stages.
 - **Scoped deep attribution** shows synchronous Harmony callback time assigned to mods during `ZNetScene.Awake` and `ObjectDB.Awake`.
+- **Startup acceleration** reports safe localization-cache and automatic config-write activity.
+- **Localization CSV acceleration** reports cache hits, misses, replay time, and uncached parse time for the active phase.
+- **Connection outcome** separates normal connection time, time to the first failure decision, and the later return-to-lobby/error-display time.
+- **Connection stability** reports the fixed 90-second protection targets, preserved fragment behavior, installation time, and compatibility warnings.
 - **Unattributed time** is work that cannot be safely assigned to one mod.
 
 The slowest entries are useful investigation targets. They are not automatic proof that a mod is broken; manager mods such as Jotunn may perform work on behalf of several other mods.
@@ -113,9 +147,10 @@ This section helps you find mods that spend a long time being created or enabled
 === Lobby To World ===
 Result: completed
 Total: 52.154 s
+Connection outcome:
+  Normal connection time: 52.154 s
 Milestone intervals:
   Breakdown: lifecycle execution + remaining time until the next milestone.
-  0.022 s (0.001 s + 0.021 s): FejdStartup.OnWorldStart
   1.468 s (0.000 s + 1.468 s): FejdStartup.TransitionToMainScene
   0.233 s (0.000 s + 0.233 s): FejdStartup.LoadMainScene
   0.043 s (0.043 s + 0.000 s): Game.Awake
@@ -157,3 +192,7 @@ The scoped attribution rows use `ObjectDB + ZNetScene` order. For example, DataF
 ## Measurement Limits
 
 LoadTimeProfiler safely assigns synchronous work that it can observe. Network waits, coroutine continuations, background work, vanilla work, transpiled code, and work completed before the patcher starts may remain unattributed. Work delegated through another framework may be listed under that framework instead of the mod that requested it.
+
+Acceleration statistics describe work observed or coalesced in the current run; they are not a synthetic estimate of total time saved. Compare several runs with identical mod, world, and endpoint conditions.
+
+Connection timing begins when `FejdStartup.TransitionToMainScene` accepts the world transition, so pre-connection login, permission, warning, and selection prompts are not counted as a hanging connection attempt. Success reuses the existing `Game.SpawnPlayer` completion timestamp. Failure stores `Game.Logout` as a candidate timestamp and confirms it from the terminal status shown by `FejdStartup.ShowConnectError`; a benign return to the lobby is reported as cancelled. This event-based measurement does not poll connection state each frame.

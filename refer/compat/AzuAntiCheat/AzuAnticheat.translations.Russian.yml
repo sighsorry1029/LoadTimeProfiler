@@ -1,0 +1,65 @@
+﻿godmode_detected: Обнаружен режим Бога (God Mode)
+godmode_detected_message_discord: Игрок пытался использовать чит на режим Бога (God Mode)
+fly_detected: Обнаружен режим полёта (Fly Mode)
+fly_detected_message_discord: Игрок пытался использовать чит на полёт (Fly Mode)
+nocost_detected: Обнаружен чит на постройку/крафт без стоимости (No Cost Cheat)
+nocost_detected_message_discord: пытался использовать чит на постройку/крафт без стоимости (No Cost Cheat)
+freefly_detected: Обнаружен чит на свободный полёт камерой (Freefly Camera Mode)
+freefly_detected_message_discord: Игрок пытался использовать чит на свободный полёт камерой (Freefly Camera Mode)
+ghostmode_detected: Обнаружен чит на режим призрака (Ghost Cheat)
+ghostmode_detected_message_discord: Игрок пытался использовать чит на режим призрака (Ghost Mode)
+carryweight_detected: Обнаружено превышение лимита на переносимый вес (Carry Weight)
+carryweight_detected_message_discord: >-
+  Переносимый вес игрока превышает установленный лимит в {carryLimit} единиц. В настоящее время у него
+health_cheat_detected: Превышение лимита здоровья
+health_cheat_detected_message_discord: >-
+  Здоровье игрока превышает установленный лимит в {healthLimit} единиц. В настоящее время у него
+stamina_cheat_detected: Превышение лимита выносливости
+stamina_cheat_detected_message_discord: >-
+  Выносливость игрока превышает установленный лимит в {staminaLimit} единиц. В настоящее время у него
+fly_cheat_active: >-
+  Игрок был обнаружен в полёте.
+exploremap_cheat_message: Открытие мира (Explore All)
+exploremap_cheat_message_discord: >-
+  Игрок пытался использовать чит на открытие всей карты (Explore All).
+  Эта попытка была предотвращена.
+cheat_detected: Обнаружен чит
+cheat_engine_detected: Cheat Engine обнаружен
+nowebhook_cheat_detected: >-
+  Чит был обнаружен, но из-за того, что вебхук не был установлен, в дискорде ничего не будет размещено. Игрок будет отключен от сервера.
+  Установите, пожалуйста, вебхук в AzuAntiCheat_Webhook.yml файле, который находится в папке config.
+carryweight_cheat_message: Изменённый переносимый вес (Carry Weight)
+chat_cheat_message: Кикнут за попытку использования читов через чат
+connect_error_message: >-
+  У Вас нет всех необходимых модов, которые требует сервер.
+
+  Пожалуйста, попробуйте переустановить клиент, если ошибка не пропадает, то обратитесь к администрации сервера.
+console_cheat_message: Вы были кикнуты с сервера за попытку использовать чит через консоль.
+damage_cheat_message: Вы были кикнуты с сервера. У Вас был замечен слишком высокий урон.
+exploreall_cheat_message: Вы были кикнуты с сервера за попытку использовать чит на открытие карты (ExploreAll Cheat).
+fly_cheat_message: Полёт
+fly2_cheat_message: Активный полёт
+freefly_cheat_message: Режим свободного полёта (камерой)
+ghostmode_cheat_message: Режим призрака
+godmode_cheat_message: Режим Бога
+health_cheat_message: Изменённое здоровье
+moderator_connect_error_message: >-
+  У Вас нет всех необходимых модов, которые требует сервер.
+
+  Модераторы могут иметь дополнительные моды, но также должны иметь все необходимые моды для игры.
+nocost_cheat_message: Постройка/крафт без стоимости (No Build Cost)
+stamina_cheat_message: Изменённая выносливость
+banned_mods_message: Вы были кикнуты с сервера. У Вас были обнаружены запрещённые моды (их нет в whitelist или greylist).
+non_whitelisted_mods_clientmessage: Вы были кикнуты с сервера. Вас нет в whitelist'е или у Вас несовместимость модов с сервером.
+non_whitelisted_mods_discord_message: Обнаружена несовместимость модов или игрока нет в whitelist'е сервера.
+missing_mods_clientmessage: Вы были кикнуты с сервера. Обнаружена несовместимость или отсутствие необходимых модов.
+missing_mods_discord_message: Обнаружено отсутствие или несовместимость модов.
+steam_name: Steam Name
+steam_id: Steam ID
+player_name: Имя игрока
+player_location: Местоположение игрока
+player_world: Мир игрока
+additional_info: Дополнительная информация
+server_name: Название сервера
+azu_ban: Бан
+azu_kick: Кик

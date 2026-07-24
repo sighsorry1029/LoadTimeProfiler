@@ -21,7 +21,7 @@ internal static class LifecyclePatches
         }
     }
 
-    internal static void Enter(MethodBase method)
+    internal static void Enter(MethodBase method, object[] arguments)
     {
         if (!LoadTimeProfilerPatcher.ProfilingEnabled || !TargetsByMethod.TryGetValue(method, out LifecycleTarget target))
         {
@@ -32,6 +32,16 @@ internal static class LifecyclePatches
         if (!dedicatedServer && target.BeginsConnection)
         {
             TimelineProfiler.BeginConnection(target.Label, target.RestartsConnection);
+        }
+
+        if (!dedicatedServer && target.ObservesConnectionLogout)
+        {
+            ObserveConnectionLogout();
+        }
+
+        if (!dedicatedServer && target.MarksFailureDecisionFallback)
+        {
+            ObserveConnectionErrorDisplay(arguments);
         }
 
         if (target.StartupMilestone ||
@@ -93,17 +103,8 @@ internal static class LifecyclePatches
 
         if (!dedicatedServer && target.AbortsConnection)
         {
-            string status;
-            try
-            {
-                status = ZNet.GetConnectionStatus().ToString();
-            }
-            catch
-            {
-                status = "unknown";
-            }
-
-            TimelineProfiler.AbortConnection(target.Label + " status=" + status);
+            TimelineProfiler.CancelConnection(
+                target.Label + " status=" + GetConnectionStatus());
         }
     }
 
@@ -119,23 +120,21 @@ internal static class LifecyclePatches
         Add(
             targets,
             typeof(FejdStartup),
-            nameof(FejdStartup.JoinServer),
-            "FejdStartup.JoinServer",
+            nameof(FejdStartup.TransitionToMainScene),
+            "FejdStartup.TransitionToMainScene",
             connection: true,
             beginsConnection: true,
             restartsConnection: true,
             preparesDeepLobbyAttribution: true);
+        Add(targets, typeof(FejdStartup), nameof(FejdStartup.LoadMainScene), "FejdStartup.LoadMainScene", connection: true);
         Add(
             targets,
             typeof(FejdStartup),
-            nameof(FejdStartup.OnWorldStart),
-            "FejdStartup.OnWorldStart",
+            nameof(FejdStartup.ShowConnectError),
+            "FejdStartup.ShowConnectError",
             connection: true,
-            beginsConnection: true,
-            preparesDeepLobbyAttribution: true);
-        Add(targets, typeof(FejdStartup), nameof(FejdStartup.TransitionToMainScene), "FejdStartup.TransitionToMainScene", connection: true);
-        Add(targets, typeof(FejdStartup), nameof(FejdStartup.LoadMainScene), "FejdStartup.LoadMainScene", connection: true);
-        Add(targets, typeof(FejdStartup), nameof(FejdStartup.ShowConnectError), "FejdStartup.ShowConnectError", connection: true, abortsConnection: true);
+            marksFailureDecisionFallback: true,
+            abortsConnection: true);
 
         Add(targets, typeof(Game), nameof(Game.Awake), "Game.Awake", connection: true);
         Add(targets, typeof(ZoneSystem), nameof(ZoneSystem.Awake), "ZoneSystem.Awake", connection: true);
@@ -155,6 +154,13 @@ internal static class LifecyclePatches
         Add(targets, typeof(ZNet), nameof(ZNet.ClientConnect), "ZNet.ClientConnect", connection: true);
         Add(targets, typeof(ZNet), nameof(ZNet.OnNewConnection), "ZNet.OnNewConnection", connection: true);
         Add(targets, typeof(ZNet), "RPC_PeerInfo", "ZNet.RPC_PeerInfo", connection: true);
+        Add(
+            targets,
+            typeof(Game),
+            nameof(Game.Logout),
+            "Game.Logout",
+            connection: true,
+            observesConnectionLogout: true);
         Add(targets, typeof(Game), nameof(Game.RequestRespawn), "Game.RequestRespawn", connection: true);
         Add(targets, typeof(Game), nameof(Game.SpawnPlayer), "Game.SpawnPlayer", connection: true, completesConnection: true);
 
@@ -185,6 +191,8 @@ internal static class LifecyclePatches
         bool completesStartup = false,
         bool dedicatedStartupCompletion = false,
         bool completesConnection = false,
+        bool observesConnectionLogout = false,
+        bool marksFailureDecisionFallback = false,
         bool abortsConnection = false)
     {
         MethodBase? method = AccessTools.Method(type, methodName);
@@ -205,7 +213,122 @@ internal static class LifecyclePatches
             completesStartup,
             dedicatedStartupCompletion,
             completesConnection,
+            observesConnectionLogout,
+            marksFailureDecisionFallback,
             abortsConnection));
+    }
+
+    private static void ObserveConnectionLogout()
+    {
+        if (!TimelineProfiler.IsActive(ProfileSession.Connection))
+        {
+            return;
+        }
+
+        // ServerSync and AzuAntiCheat set ErrorVersion immediately after
+        // Game.Logout returns, so this hook records a candidate but never
+        // closes the session from the still-benign prefix state.
+        try
+        {
+            if (ZNet.m_loadError)
+            {
+                const string observation = "Game.Logout WorldLoadError";
+                TimelineProfiler.MarkConnectionLogoutCandidate(observation);
+                TimelineProfiler.ConfirmConnectionFailureDecision(observation);
+                return;
+            }
+
+            ZNet.ConnectionStatus status = ZNet.GetConnectionStatus();
+            string statusObservation = "Game.Logout status=" + status;
+            TimelineProfiler.MarkConnectionLogoutCandidate(statusObservation);
+            if (IsTerminalConnectionStatus(status))
+            {
+                TimelineProfiler.ConfirmConnectionFailureDecision(
+                    statusObservation);
+            }
+        }
+        catch (Exception ex)
+        {
+            TimelineProfiler.MarkConnectionLogoutCandidate(
+                "Game.Logout status check failed: " + ex.GetType().Name);
+        }
+    }
+
+    private static void ObserveConnectionErrorDisplay(object[] arguments)
+    {
+        if (!TimelineProfiler.IsActive(ProfileSession.Connection))
+        {
+            return;
+        }
+
+        ZNet.ConnectionStatus? suppliedStatus =
+            arguments.Length > 0 &&
+            arguments[0] is ZNet.ConnectionStatus statusArgument
+                ? statusArgument
+                : null;
+        try
+        {
+            // FejdStartup.Start calls ShowConnectError(None) on every lobby
+            // entry. Only a terminal supplied/current state confirms failure.
+            if (ZNet.m_loadError)
+            {
+                TimelineProfiler.ConfirmConnectionFailureDecision(
+                    "FejdStartup.ShowConnectError status=WorldLoadError");
+                return;
+            }
+
+            if (suppliedStatus.HasValue &&
+                IsTerminalConnectionStatus(suppliedStatus.Value))
+            {
+                TimelineProfiler.ConfirmConnectionFailureDecision(
+                    "FejdStartup.ShowConnectError status=" +
+                    suppliedStatus.Value);
+                return;
+            }
+
+            ZNet.ConnectionStatus currentStatus = ZNet.GetConnectionStatus();
+            if (IsTerminalConnectionStatus(currentStatus))
+            {
+                TimelineProfiler.ConfirmConnectionFailureDecision(
+                    "FejdStartup.ShowConnectError status=" +
+                    currentStatus);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (suppliedStatus.HasValue &&
+                IsTerminalConnectionStatus(suppliedStatus.Value))
+            {
+                TimelineProfiler.ConfirmConnectionFailureDecision(
+                    "FejdStartup.ShowConnectError status=" +
+                    suppliedStatus.Value +
+                    " (state check failed: " +
+                    ex.GetType().Name +
+                    ")");
+            }
+        }
+    }
+
+    private static bool IsTerminalConnectionStatus(
+        ZNet.ConnectionStatus status)
+    {
+        return status != ZNet.ConnectionStatus.None &&
+               status != ZNet.ConnectionStatus.Connecting &&
+               status != ZNet.ConnectionStatus.Connected;
+    }
+
+    private static string GetConnectionStatus()
+    {
+        try
+        {
+            return ZNet.m_loadError
+                ? "WorldLoadError"
+                : ZNet.GetConnectionStatus().ToString();
+        }
+        catch
+        {
+            return "unknown";
+        }
     }
 
     private sealed class LifecycleTarget
@@ -221,6 +344,8 @@ internal static class LifecyclePatches
             bool completesStartup,
             bool dedicatedStartupCompletion,
             bool completesConnection,
+            bool observesConnectionLogout,
+            bool marksFailureDecisionFallback,
             bool abortsConnection)
         {
             Method = method;
@@ -233,6 +358,8 @@ internal static class LifecyclePatches
             CompletesStartup = completesStartup;
             DedicatedStartupCompletion = dedicatedStartupCompletion;
             CompletesConnection = completesConnection;
+            ObservesConnectionLogout = observesConnectionLogout;
+            MarksFailureDecisionFallback = marksFailureDecisionFallback;
             AbortsConnection = abortsConnection;
         }
 
@@ -246,15 +373,19 @@ internal static class LifecyclePatches
         internal bool CompletesStartup { get; }
         internal bool DedicatedStartupCompletion { get; }
         internal bool CompletesConnection { get; }
+        internal bool ObservesConnectionLogout { get; }
+        internal bool MarksFailureDecisionFallback { get; }
         internal bool AbortsConnection { get; }
     }
 }
 
 internal static class LoadTimeProfilerLifecyclePatch
 {
-    internal static void Prefix(MethodBase __originalMethod)
+    internal static void Prefix(
+        MethodBase __originalMethod,
+        object[] __args)
     {
-        LifecyclePatches.Enter(__originalMethod);
+        LifecyclePatches.Enter(__originalMethod, __args);
     }
 
     internal static Exception? Finalizer(MethodBase __originalMethod, Exception? __exception)

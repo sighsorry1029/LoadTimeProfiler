@@ -3,7 +3,7 @@ using System.Runtime.InteropServices;
 using LoadTimeProfiler;
 
 [assembly: AssemblyTitle(LoadTimeProfilerPatcher.ModName)]
-[assembly: AssemblyDescription("Valheim preloader startup and connection profiler")]
+[assembly: AssemblyDescription("Valheim startup/connection profiler, accelerator, and join-stability patcher")]
 [assembly: AssemblyConfiguration("")]
 [assembly: AssemblyCompany(LoadTimeProfilerPatcher.Author)]
 [assembly: AssemblyProduct(LoadTimeProfilerPatcher.ModName)]

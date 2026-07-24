@@ -56,6 +56,10 @@
       <HintPath>$(PublicizedAssembliesPath)\assembly_valheim_publicized.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <Reference Include="assembly_guiutils">
+      <HintPath>$(CorlibPath)\assembly_guiutils.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
     <Reference Include="BepInEx">
       <HintPath>$(BepInExPath)\core\BepInEx.dll</HintPath>
       <Private>False</Private>
@@ -85,6 +89,9 @@
     <Compile Include="LifecyclePhaseProfiler.cs" />
     <Compile Include="LifecyclePatches.cs" />
     <Compile Include="DeepLobbyAttributionProfiler.cs" />
+    <Compile Include="StartupAcceleration.cs" />
+    <Compile Include="LocalizationAcceleration.cs" />
+    <Compile Include="ConnectionStability.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

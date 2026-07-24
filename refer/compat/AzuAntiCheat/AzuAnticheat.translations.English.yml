@@ -1,0 +1,65 @@
+godmode_detected: God Mode Detected
+godmode_detected_message_discord: Client turned on the cheat for God Mode
+fly_detected: Fly Mode Detected
+fly_detected_message_discord: Client turned on the cheat for Fly Mode
+nocost_detected: No Cost Cheat Detected
+nocost_detected_message_discord: Client turned on the cheat for No Cost
+freefly_detected: Freefly Cheat Detected
+freefly_detected_message_discord: Client turned on the cheat for Freefly Camera Mode
+ghostmode_detected: Ghost Cheat Detected
+ghostmode_detected_message_discord: Client turned on the cheat for Ghost Mode
+carryweight_detected: Carry Weight Limit Exceeded
+carryweight_detected_message_discord: >-
+  Player carry weight is past your limit of {carryLimit}. It is currently
+health_cheat_detected: Health Limit Exceeded
+health_cheat_detected_message_discord: >-
+  Player health is past your limit of {healthLimit}. It is currently
+stamina_cheat_detected: Stamina Limit Exceeded
+stamina_cheat_detected_message_discord: >-
+  Player stamina is past your limit of {staminaLimit}. It is currently
+fly_cheat_active: >-
+  The player was detected actively flying.
+exploremap_cheat_message: Explore All (Map)
+exploremap_cheat_message_discord: >-
+  Player has attempted to use the Explore All (Map) cheat.
+  This action was prevented.
+cheat_detected: CHEAT DETECTED
+cheat_engine_detected: Cheat Engine Detected
+nowebhook_cheat_detected: >-
+  A cheat was detected, but no webhook was set up. Nothing will be posted to Discord. The player will be disconnected.
+  Please set up a webhook in the AzuAntiCheat_Webhook.yml file found in the server's config folder.
+carryweight_cheat_message: Modified Carryweight
+chat_cheat_message: Kicked for trying to use a cheat via the chat
+connect_error_message: >-
+  You are missing mods the server requires.
+
+  Please check with your admins, read the error found in your log, or re-download the pack
+console_cheat_message: Kicked for trying to use a cheat via the console
+damage_cheat_message: You have been kicked; Massive damage detected.
+exploreall_cheat_message: You have been kicked; Attempted to use ExploreAll (Map) Cheat
+fly_cheat_message: Fly
+fly2_cheat_message: Flying
+freefly_cheat_message: Freefly Cam Mode
+ghostmode_cheat_message: Ghost Mode
+godmode_cheat_message: God Mode
+health_cheat_message: Modified Health
+moderator_connect_error_message: >-
+  You are missing mods the server requires.
+
+  Moderators can have extra mods, but still must have all required.
+nocost_cheat_message: No Build Cost
+stamina_cheat_message: Modified Stamina
+banned_mods_message: You have been kicked; Banned Mods Detected (Not on whitelist or greylist)
+non_whitelisted_mods_clientmessage: You have been kicked; Non-whitelisted or Mismatched Mods Detected
+non_whitelisted_mods_discord_message: Non-Whitelisted/Mismatched Mod(s) Found
+missing_mods_clientmessage: You have been kicked; Missing or Mismatched Mod(s) Detected
+missing_mods_discord_message: Missing/Mismatched Mod(s) Found
+steam_name: Steam Name
+steam_id: Steam ID
+player_name: Player Name
+player_location: Player Location
+player_world: Player World
+additional_info: Additional Information
+server_name: Server Name
+azu_ban: Ban
+azu_kick: Kick

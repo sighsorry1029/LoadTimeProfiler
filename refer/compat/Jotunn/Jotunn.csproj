@@ -1,0 +1,65 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AssemblyName>Jotunn</AssemblyName>
+    <GenerateAssemblyInfo>False</GenerateAssemblyInfo>
+    <TargetFramework>net462</TargetFramework>
+  </PropertyGroup>
+  <PropertyGroup>
+    <LangVersion>12.0</LangVersion>
+    <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
+  </PropertyGroup>
+  <PropertyGroup>
+    <RootNamespace />
+  </PropertyGroup>
+  <ItemGroup>
+    <None Remove="Jotunn.Localization.German.json" />
+    <None Remove="Jotunn.Localization.English.json" />
+    <None Remove="Jotunn.Unity.AssetBundles.modcompat" />
+    <None Remove="Jotunn.Unity.AssetBundles.colorpicker" />
+    <None Remove="Jotunn.Unity.AssetBundles.jotunn" />
+    <None Remove="Jotunn.Unity.AssetBundles.minimapmanager" />
+    <EmbeddedResource Include="Jotunn.Localization.German.json" LogicalName="Jotunn.Localization.German.json" />
+    <EmbeddedResource Include="Jotunn.Localization.English.json" LogicalName="Jotunn.Localization.English.json" />
+    <EmbeddedResource Include="Jotunn.Unity.AssetBundles.modcompat" LogicalName="Jotunn.Unity.AssetBundles.modcompat" />
+    <EmbeddedResource Include="Jotunn.Unity.AssetBundles.colorpicker" LogicalName="Jotunn.Unity.AssetBundles.colorpicker" />
+    <EmbeddedResource Include="Jotunn.Unity.AssetBundles.jotunn" LogicalName="Jotunn.Unity.AssetBundles.jotunn" />
+    <EmbeddedResource Include="Jotunn.Unity.AssetBundles.minimapmanager" LogicalName="Jotunn.Unity.AssetBundles.minimapmanager" />
+  </ItemGroup>
+  <ItemGroup>
+    <Reference Include="UnityEngine.CoreModule">
+      <HintPath>obj/codex-decompile-reference-test/refs/UnityEngine.CoreModule.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.UI" />
+    <Reference Include="BepInEx">
+      <HintPath>obj/codex-decompile-reference-test/refs/BepInEx.dll</HintPath>
+    </Reference>
+    <Reference Include="System.Core" />
+    <Reference Include="assembly_utils" />
+    <Reference Include="Unity.TextMeshPro" />
+    <Reference Include="assembly_valheim">
+      <HintPath>obj/codex-decompile-reference-test/refs/assembly_valheim.dll</HintPath>
+    </Reference>
+    <Reference Include="0Harmony">
+      <HintPath>obj/codex-decompile-reference-test/refs/0Harmony.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.AssetBundleModule" />
+    <Reference Include="MonoMod.Utils" />
+    <Reference Include="Mono.Cecil">
+      <HintPath>obj/codex-decompile-reference-test/refs/Mono.Cecil.dll</HintPath>
+    </Reference>
+    <Reference Include="Unity.InputSystem" />
+    <Reference Include="SoftReferenceableAssets" />
+    <Reference Include="UnityEngine.TextRenderingModule" />
+    <Reference Include="UnityEngine.UIModule" />
+    <Reference Include="assembly_guiutils">
+      <HintPath>obj/codex-decompile-reference-test/refs/assembly_guiutils.dll</HintPath>
+    </Reference>
+    <Reference Include="UnityEngine.ParticleSystemModule" />
+    <Reference Include="UnityEngine.ImageConversionModule" />
+    <Reference Include="UnityEngine.InputLegacyModule" />
+    <Reference Include="UnityEngine.AudioModule" />
+    <Reference Include="UnityEngine.AnimationModule" />
+    <Reference Include="UnityEngine.PhysicsModule" />
+    <Reference Include="YamlDotNet" />
+  </ItemGroup>
+</Project>

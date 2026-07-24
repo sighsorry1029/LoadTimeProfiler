@@ -47,6 +47,7 @@ internal static class TimelineProfiler
 
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Startup);
         ChainloaderProfiler.ResetSession();
+        StartupAcceleration.ResetSession(ProfileSession.Startup);
         if (dedicatedServer)
         {
             DeepLobbyAttributionProfiler.ResetSession();
@@ -71,7 +72,7 @@ internal static class TimelineProfiler
 
         if (restartActive)
         {
-            AbortConnection("superseded by " + label);
+            CancelConnection("superseded by " + label);
         }
 
         lock (Lock)
@@ -85,6 +86,7 @@ internal static class TimelineProfiler
 
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Connection);
         DeepLobbyAttributionProfiler.ResetSession();
+        StartupAcceleration.ResetSession(ProfileSession.Connection);
         lock (Lock)
         {
             double now = NowMilliseconds();
@@ -163,7 +165,74 @@ internal static class TimelineProfiler
 
     internal static void AbortConnection(string label)
     {
-        Finish(Connection, label, "aborted");
+        MarkConnectionFailureDecision(label);
+        Finish(Connection, label, "failed");
+    }
+
+    internal static void CancelConnection(string label)
+    {
+        bool failureWasAlreadyDecided;
+        lock (Lock)
+        {
+            failureWasAlreadyDecided = Connection.HasFailureDecision;
+        }
+
+        Finish(
+            Connection,
+            label,
+            failureWasAlreadyDecided ? "failed" : "cancelled");
+    }
+
+    internal static void MarkConnectionFailureDecision(string reason)
+    {
+        if (!LoadTimeProfilerPatcher.ProfilingEnabled)
+        {
+            return;
+        }
+
+        lock (Lock)
+        {
+            if (Connection.Active)
+            {
+                Connection.MarkFailureDecision(NowMilliseconds(), reason);
+            }
+        }
+    }
+
+    internal static void MarkConnectionLogoutCandidate(string observation)
+    {
+        if (!LoadTimeProfilerPatcher.ProfilingEnabled)
+        {
+            return;
+        }
+
+        lock (Lock)
+        {
+            if (Connection.Active)
+            {
+                Connection.MarkLogoutCandidate(
+                    NowMilliseconds(),
+                    observation);
+            }
+        }
+    }
+
+    internal static void ConfirmConnectionFailureDecision(string reason)
+    {
+        if (!LoadTimeProfilerPatcher.ProfilingEnabled)
+        {
+            return;
+        }
+
+        lock (Lock)
+        {
+            if (Connection.Active)
+            {
+                Connection.ConfirmFailureDecision(
+                    NowMilliseconds(),
+                    reason);
+            }
+        }
     }
 
     private static void Mark(SessionState state, string label)
@@ -201,9 +270,16 @@ internal static class TimelineProfiler
         builder.AppendLine($"=== {snapshot.Name} ===");
         builder.AppendLine($"Result: {snapshot.Result}");
         builder.Append("Total: ").AppendLine(FormatDuration(snapshot.TotalMilliseconds));
+        if (snapshot.Session == ProfileSession.Connection)
+        {
+            AppendConnectionOutcome(builder, snapshot);
+        }
+
         Dictionary<string, double> lifecycleExecutionTimes =
             LifecyclePhaseProfiler.SnapshotSingleExecutionTimes(snapshot.Session);
         AppendMilestoneIntervals(builder, snapshot.Milestones, lifecycleExecutionTimes);
+        StartupAcceleration.AppendReport(builder, snapshot.Session);
+        ConnectionStability.AppendReport(builder, snapshot.Session);
         if (snapshot.Session == ProfileSession.Startup)
         {
             ChainloaderProfiler.AppendStartupReport(builder);
@@ -218,6 +294,39 @@ internal static class TimelineProfiler
 
         ProfilerLog.WriteBlock(builder.ToString());
         LoadTimeProfilerPatcher.LogInfo($"{snapshot.Name} profile {snapshot.Result}: {FormatDuration(snapshot.TotalMilliseconds)}. See {ProfilerLog.FilePath}.");
+    }
+
+    private static void AppendConnectionOutcome(
+        StringBuilder builder,
+        SessionSnapshot snapshot)
+    {
+        builder.AppendLine("Connection outcome:");
+        if (string.Equals(snapshot.Result, "completed", StringComparison.Ordinal))
+        {
+            builder.Append("  Normal connection time: ")
+                .AppendLine(FormatDuration(snapshot.TotalMilliseconds));
+            return;
+        }
+
+        if (string.Equals(snapshot.Result, "failed", StringComparison.Ordinal))
+        {
+            double decisionMilliseconds =
+                snapshot.FailureDecisionMilliseconds ?? snapshot.TotalMilliseconds;
+            builder.Append("  Failure: ")
+                .AppendLine(snapshot.FailureReason ?? "unknown");
+            builder.Append("  Time to failure decision: ")
+                .AppendLine(FormatDuration(decisionMilliseconds));
+            builder.Append("  Return to lobby/error display after decision: ")
+                .AppendLine(
+                    FormatDuration(
+                        Math.Max(
+                            0d,
+                            snapshot.TotalMilliseconds - decisionMilliseconds)));
+            return;
+        }
+
+        builder.Append("  Cancelled attempt time: ")
+            .AppendLine(FormatDuration(snapshot.TotalMilliseconds));
     }
 
     private static void AppendMilestoneIntervals(
@@ -298,6 +407,10 @@ internal static class TimelineProfiler
     {
         private readonly List<Milestone> _milestones = new();
         private readonly HashSet<string> _seenMilestones = new(StringComparer.Ordinal);
+        private double? _failureDecisionMilliseconds;
+        private string? _failureReason;
+        private double? _logoutCandidateMilliseconds;
+        private string? _logoutCandidateObservation;
 
         internal SessionState(ProfileSession session, string name)
         {
@@ -308,6 +421,7 @@ internal static class TimelineProfiler
         internal ProfileSession Session { get; }
         internal string Name { get; private set; }
         internal bool Active { get; private set; }
+        internal bool HasFailureDecision => _failureDecisionMilliseconds.HasValue;
         private double StartMilliseconds { get; set; }
 
         internal void Begin(double startMilliseconds, string? name = null)
@@ -321,6 +435,10 @@ internal static class TimelineProfiler
             StartMilliseconds = startMilliseconds;
             _milestones.Clear();
             _seenMilestones.Clear();
+            _failureDecisionMilliseconds = null;
+            _failureReason = null;
+            _logoutCandidateMilliseconds = null;
+            _logoutCandidateObservation = null;
         }
 
         internal void AddMilestoneOnce(string label, double absoluteMilliseconds)
@@ -337,23 +455,93 @@ internal static class TimelineProfiler
             _milestones.Add(new Milestone(label, Math.Max(0d, absoluteMilliseconds - StartMilliseconds)));
         }
 
+        internal void MarkFailureDecision(
+            double absoluteMilliseconds,
+            string reason)
+        {
+            if (_failureDecisionMilliseconds.HasValue)
+            {
+                return;
+            }
+
+            _failureDecisionMilliseconds = Math.Max(
+                0d,
+                absoluteMilliseconds - StartMilliseconds);
+            _failureReason = reason;
+            AddMilestone(
+                "Connection failure decided: " + reason,
+                absoluteMilliseconds);
+        }
+
+        internal void MarkLogoutCandidate(
+            double absoluteMilliseconds,
+            string observation)
+        {
+            if (_logoutCandidateMilliseconds.HasValue)
+            {
+                return;
+            }
+
+            _logoutCandidateMilliseconds = Math.Max(
+                0d,
+                absoluteMilliseconds - StartMilliseconds);
+            _logoutCandidateObservation = observation;
+        }
+
+        internal void ConfirmFailureDecision(
+            double absoluteMilliseconds,
+            string reason)
+        {
+            if (_failureDecisionMilliseconds.HasValue)
+            {
+                return;
+            }
+
+            _failureDecisionMilliseconds =
+                _logoutCandidateMilliseconds ??
+                Math.Max(0d, absoluteMilliseconds - StartMilliseconds);
+            _failureReason = _logoutCandidateObservation == null
+                ? reason
+                : reason + " (logout first observed as " +
+                  _logoutCandidateObservation + ")";
+            AddMilestone(
+                "Connection failure confirmed: " + reason,
+                absoluteMilliseconds);
+        }
+
         internal SessionSnapshot Complete(double absoluteMilliseconds, string result)
         {
             Active = false;
             double total = Math.Max(0d, absoluteMilliseconds - StartMilliseconds);
-            return new SessionSnapshot(Session, Name, result, total, _milestones.ToArray());
+            return new SessionSnapshot(
+                Session,
+                Name,
+                result,
+                total,
+                _milestones.ToArray(),
+                _failureDecisionMilliseconds,
+                _failureReason);
         }
     }
 
     private readonly struct SessionSnapshot
     {
-        internal SessionSnapshot(ProfileSession session, string name, string result, double totalMilliseconds, Milestone[] milestones)
+        internal SessionSnapshot(
+            ProfileSession session,
+            string name,
+            string result,
+            double totalMilliseconds,
+            Milestone[] milestones,
+            double? failureDecisionMilliseconds,
+            string? failureReason)
         {
             Session = session;
             Name = name;
             Result = result;
             TotalMilliseconds = totalMilliseconds;
             Milestones = milestones;
+            FailureDecisionMilliseconds = failureDecisionMilliseconds;
+            FailureReason = failureReason;
         }
 
         internal ProfileSession Session { get; }
@@ -361,6 +549,8 @@ internal static class TimelineProfiler
         internal string Result { get; }
         internal double TotalMilliseconds { get; }
         internal Milestone[] Milestones { get; }
+        internal double? FailureDecisionMilliseconds { get; }
+        internal string? FailureReason { get; }
     }
 
     private readonly struct Milestone
