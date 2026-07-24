@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text;
+using BepInEx;
 
 namespace LoadTimeProfiler;
 
@@ -48,6 +49,8 @@ internal static class TimelineProfiler
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Startup);
         ChainloaderProfiler.ResetSession();
         StartupAcceleration.ResetSession(ProfileSession.Startup);
+        FastAssetBundleHashProfiler.ResetSession(ProfileSession.Startup);
+        FejdStartupAttributionProfiler.ResetSession();
         if (dedicatedServer)
         {
             DeepLobbyAttributionProfiler.ResetSession();
@@ -87,7 +90,6 @@ internal static class TimelineProfiler
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Connection);
         DeepLobbyAttributionProfiler.ResetSession();
         StartupAcceleration.ResetSession(ProfileSession.Connection);
-        SpawnReadinessProfiler.ResetSession();
         lock (Lock)
         {
             double now = NowMilliseconds();
@@ -161,7 +163,11 @@ internal static class TimelineProfiler
 
     internal static void CompleteConnection(string label)
     {
-        Finish(Connection, label, "completed");
+        Finish(
+            Connection,
+            label,
+            "completed",
+            deferReport: true);
     }
 
     internal static void AbortConnection(string label)
@@ -252,7 +258,11 @@ internal static class TimelineProfiler
         }
     }
 
-    private static void Finish(SessionState state, string label, string result)
+    private static void Finish(
+        SessionState state,
+        string label,
+        string result,
+        bool deferReport = false)
     {
         SessionSnapshot snapshot;
         lock (Lock)
@@ -267,11 +277,91 @@ internal static class TimelineProfiler
             snapshot = state.Complete(now, result);
         }
 
-        if (snapshot.Session == ProfileSession.Connection)
+        if (deferReport &&
+            TryDeferReport(snapshot))
         {
-            SpawnReadinessProfiler.CloseSession();
+            return;
         }
 
+        WriteReportSafely(snapshot);
+    }
+
+    private static bool TryDeferReport(
+        SessionSnapshot snapshot)
+    {
+        try
+        {
+            ThreadingHelper? helper = ThreadingHelper.Instance;
+            if (helper == null)
+            {
+                return false;
+            }
+
+            // A two-stage queue guarantees that report work cannot run in the
+            // same ThreadingHelper.Update that first observes this request.
+            // The helper is BepInEx-owned and DontDestroyOnLoad, so the report
+            // is not tied to the current Game/scene object's lifetime.
+            helper.StartSyncInvoke(
+                () => QueueDeferredReportSecondStage(snapshot));
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ProfilerLog.WriteLine(
+                "Could not defer the completed connection report: " +
+                ex.Message);
+            return false;
+        }
+    }
+
+    private static void QueueDeferredReportSecondStage(
+        SessionSnapshot snapshot)
+    {
+        try
+        {
+            ThreadingHelper? helper = ThreadingHelper.Instance;
+            if (helper == null)
+            {
+                WriteReportSafely(snapshot);
+                return;
+            }
+
+            helper.StartSyncInvoke(
+                () => WriteReportSafely(snapshot));
+        }
+        catch (Exception ex)
+        {
+            ProfilerLog.WriteLine(
+                "Could not queue the second deferred report stage: " +
+                ex.Message);
+            WriteReportSafely(snapshot);
+        }
+    }
+
+    private static void WriteReportSafely(
+        SessionSnapshot snapshot)
+    {
+        try
+        {
+            WriteReport(snapshot);
+        }
+        catch (Exception ex)
+        {
+            ProfilerLog.WriteLine(
+                "Could not assemble " +
+                snapshot.Name +
+                " report: " +
+                ex);
+            LoadTimeProfilerPatcher.LogError(
+                "Could not assemble " +
+                snapshot.Name +
+                " report: " +
+                ex.Message);
+        }
+    }
+
+    private static void WriteReport(SessionSnapshot snapshot)
+    {
         StringBuilder builder = new();
         builder.AppendLine($"=== {snapshot.Name} ===");
         builder.AppendLine($"Result: {snapshot.Result}");
@@ -281,30 +371,61 @@ internal static class TimelineProfiler
             AppendConnectionOutcome(builder, snapshot);
         }
 
+        bool reportDataCurrent =
+            IsReportDataCurrent(snapshot);
         Dictionary<string, double> lifecycleExecutionTimes =
-            LifecyclePhaseProfiler.SnapshotSingleExecutionTimes(snapshot.Session);
+            reportDataCurrent
+                ? LifecyclePhaseProfiler.SnapshotSingleExecutionTimes(
+                    snapshot.Session)
+                : new Dictionary<string, double>();
         AppendMilestoneIntervals(builder, snapshot.Milestones, lifecycleExecutionTimes);
-        if (snapshot.Session == ProfileSession.Connection)
+        if (!reportDataCurrent)
         {
-            SpawnReadinessProfiler.AppendReport(builder);
+            builder.AppendLine(
+                "Detailed profiler sections unavailable because a newer session began before this deferred report was assembled; timeline totals above remain valid.");
         }
-
-        StartupAcceleration.AppendReport(builder, snapshot.Session);
-        ConnectionStability.AppendReport(builder, snapshot.Session);
-        if (snapshot.Session == ProfileSession.Startup)
+        if (reportDataCurrent)
         {
-            ChainloaderProfiler.AppendStartupReport(builder);
-        }
+            StartupAcceleration.AppendReport(builder, snapshot.Session);
+            ConnectionStability.AppendReport(builder, snapshot.Session);
+            if (snapshot.Session == ProfileSession.Startup)
+            {
+                AzuAntiCheatPrehashAcceleration.AppendStartupReport(builder);
+                FastAssetBundleHashProfiler.AppendReport(
+                    builder,
+                    snapshot.Session);
+                ChainloaderProfiler.AppendStartupReport(builder);
+            }
 
-        LifecyclePhaseProfiler.AppendSessionReport(builder, snapshot.Session);
-        if (snapshot.Session == ProfileSession.Connection ||
-            snapshot.Session == ProfileSession.Startup && LoadTimeProfilerPatcher.IsDedicatedServer)
-        {
-            DeepLobbyAttributionProfiler.AppendReport(builder);
+            LifecyclePhaseProfiler.AppendSessionReport(
+                builder,
+                snapshot.Session);
+            if (snapshot.Session == ProfileSession.Connection ||
+                snapshot.Session == ProfileSession.Startup &&
+                LoadTimeProfilerPatcher.IsDedicatedServer)
+            {
+                DeepLobbyAttributionProfiler.AppendReport(builder);
+            }
+
+            if (snapshot.Session == ProfileSession.Startup &&
+                !LoadTimeProfilerPatcher.IsDedicatedServer)
+            {
+                FejdStartupAttributionProfiler.AppendReport(builder);
+            }
         }
 
         ProfilerLog.WriteBlock(builder.ToString());
         LoadTimeProfilerPatcher.LogInfo($"{snapshot.Name} profile {snapshot.Result}: {FormatDuration(snapshot.TotalMilliseconds)}. See {ProfilerLog.FilePath}.");
+    }
+
+    private static bool IsReportDataCurrent(
+        SessionSnapshot snapshot)
+    {
+        lock (Lock)
+        {
+            return GetState(snapshot.Session).Generation ==
+                   snapshot.Generation;
+        }
     }
 
     private static void AppendConnectionOutcome(
@@ -433,6 +554,7 @@ internal static class TimelineProfiler
         internal string Name { get; private set; }
         internal bool Active { get; private set; }
         internal bool HasFailureDecision => _failureDecisionMilliseconds.HasValue;
+        internal int Generation { get; private set; }
         private double StartMilliseconds { get; set; }
 
         internal void Begin(double startMilliseconds, string? name = null)
@@ -442,6 +564,7 @@ internal static class TimelineProfiler
                 Name = name!;
             }
 
+            Generation++;
             Active = true;
             StartMilliseconds = startMilliseconds;
             _milestones.Clear();
@@ -529,6 +652,7 @@ internal static class TimelineProfiler
                 Name,
                 result,
                 total,
+                Generation,
                 _milestones.ToArray(),
                 _failureDecisionMilliseconds,
                 _failureReason);
@@ -542,6 +666,7 @@ internal static class TimelineProfiler
             string name,
             string result,
             double totalMilliseconds,
+            int generation,
             Milestone[] milestones,
             double? failureDecisionMilliseconds,
             string? failureReason)
@@ -550,6 +675,7 @@ internal static class TimelineProfiler
             Name = name;
             Result = result;
             TotalMilliseconds = totalMilliseconds;
+            Generation = generation;
             Milestones = milestones;
             FailureDecisionMilliseconds = failureDecisionMilliseconds;
             FailureReason = failureReason;
@@ -559,6 +685,7 @@ internal static class TimelineProfiler
         internal string Name { get; }
         internal string Result { get; }
         internal double TotalMilliseconds { get; }
+        internal int Generation { get; }
         internal Milestone[] Milestones { get; }
         internal double? FailureDecisionMilliseconds { get; }
         internal string? FailureReason { get; }

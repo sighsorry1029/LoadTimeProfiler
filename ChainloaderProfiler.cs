@@ -104,6 +104,19 @@ internal static class ChainloaderProfiler
         }
 
         InstrumentStart(state.ComponentType, state.Identity);
+        try
+        {
+            AzuAntiCheatPrehashAcceleration.ObservePlugin(
+                state.ComponentType);
+        }
+        catch (Exception ex)
+        {
+            ProfilerLog.WriteLine(
+                "AzuAntiCheat prehash plugin observation failed open for '" +
+                state.ComponentType.FullName +
+                "': " +
+                ex.Message);
+        }
     }
 
     internal static void AppendStartupReport(StringBuilder builder)

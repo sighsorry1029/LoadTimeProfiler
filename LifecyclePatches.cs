@@ -21,7 +21,9 @@ internal static class LifecyclePatches
         }
     }
 
-    internal static void Enter(MethodBase method, object[] arguments)
+    internal static void Enter(
+        MethodBase method,
+        object[] arguments)
     {
         if (!LoadTimeProfilerPatcher.ProfilingEnabled || !TargetsByMethod.TryGetValue(method, out LifecycleTarget target))
         {
@@ -55,21 +57,19 @@ internal static class LifecyclePatches
             TimelineProfiler.MarkConnection(target.Label);
         }
 
-        if (!dedicatedServer && target.CompletesConnection)
-        {
-            SpawnReadinessProfiler.ObserveSpawnPlayerStarted();
-        }
-
         if (!dedicatedServer && target.PreparesDeepLobbyAttribution)
         {
             DeepLobbyAttributionProfiler.PrepareForActiveSession(method);
         }
 
+        FejdStartupAttributionProfiler.BeginTarget(method);
         LifecyclePhaseProfiler.BeginTarget(method, target.Label);
         DeepLobbyAttributionProfiler.BeginTarget(method);
     }
 
-    internal static void Exit(MethodBase method, Exception? exception)
+    internal static void Exit(
+        MethodBase method,
+        Exception? exception)
     {
         if (!LoadTimeProfilerPatcher.ProfilingEnabled || !TargetsByMethod.TryGetValue(method, out LifecycleTarget target))
         {
@@ -78,6 +78,7 @@ internal static class LifecyclePatches
 
         DeepLobbyAttributionProfiler.EndTarget(method);
         LifecyclePhaseProfiler.EndTarget(method);
+        FejdStartupAttributionProfiler.EndTarget(method);
 
         bool dedicatedServer = LoadTimeProfilerPatcher.IsDedicatedServer;
         bool completesStartup = !dedicatedServer && target.CompletesStartup ||
@@ -96,11 +97,10 @@ internal static class LifecyclePatches
 
         if (!dedicatedServer && target.CompletesConnection)
         {
-            SpawnReadinessProfiler.ObserveSpawnPlayerCompleted(
-                exception);
             if (exception == null)
             {
-                TimelineProfiler.CompleteConnection(target.Label + " local player ready");
+                TimelineProfiler.CompleteConnection(
+                    target.Label + " local player ready");
             }
             else
             {
@@ -392,12 +392,18 @@ internal static class LoadTimeProfilerLifecyclePatch
         MethodBase __originalMethod,
         object[] __args)
     {
-        LifecyclePatches.Enter(__originalMethod, __args);
+        LifecyclePatches.Enter(
+            __originalMethod,
+            __args);
     }
 
-    internal static Exception? Finalizer(MethodBase __originalMethod, Exception? __exception)
+    internal static Exception? Finalizer(
+        MethodBase __originalMethod,
+        Exception? __exception)
     {
-        LifecyclePatches.Exit(__originalMethod, __exception);
+        LifecyclePatches.Exit(
+            __originalMethod,
+            __exception);
         return __exception;
     }
 }

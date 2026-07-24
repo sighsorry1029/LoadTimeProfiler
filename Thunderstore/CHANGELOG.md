@@ -1,5 +1,28 @@
 # Changelog
 
+## 1.1.5
+
+- Added an exact-version AzuAntiCheat 4.3.11 integration that starts same-launch per-plugin SHA-256 work on one below-normal background worker while BepInEx continues loading plugins.
+- Revalidates file identity before consuming a prehash and uses a fresh synchronous streaming hash on any missing, changed, or failed result; no persistent digest cache is trusted.
+- Added narrowly scoped per-mod Harmony callback attribution for `FejdStartup.Awake`, with preparation and runtime bookkeeping cost reported separately.
+- Added diagnostic timing for only FastAssetBundleLoader's original-source hash inside `TryUseCachedBundle(Stream)`, excluding cache-output verification hashes.
+- Keeps all three additions behind the existing `General.Enabled` master switch with no new configuration options.
+
+## 1.1.4
+
+- Removed the recent spawn-readiness, per-prefab ZDO, `CreateObject`, zone-loading hold, Jotunn source-hint, and minimap diagnostic hooks.
+- Retains the coarse `Game.RequestRespawn` to `Game.SpawnPlayer` lifecycle interval, normal/failure connection outcomes, major world-loading stages, and per-mod `ObjectDB.Awake`/`ZNetScene.Awake` attribution.
+- Keeps completed connection report formatting deferred until after `SpawnPlayer` returns.
+
+## 1.1.3
+
+- Added `Game.UpdateRespawn` and `FindSpawnPoint` activation fallbacks so Unity string-based respawn invocation cannot leave spawn-readiness diagnostics empty.
+- Added final-target 3x3 ZDO attribution by prefab, including final known counts, a separate transient peak-missing backlog table with sampled first/last/clear observations, approximate inclusive `CreateObject` time, and registered-instance outcomes.
+- Adds best-effort Jotunn source metadata or clearly labeled component-presence hints without enabling Jotunn's startup-costly global `ModQuery` collection.
+- Added bounded `SetLoadingInZone`/`UnsetLoadingInZone` diagnostics, split into center-zone direct blockers and 3x3 instance-order candidates clipped to the final spawn attempt's relevant time windows, with the ordering start broadened to cover active-area sampling delay.
+- Keeps the new diagnostics observation-only and behind the existing single master switch, with no new configuration options.
+- Separately reports measured in-path diagnostic work and defers post-endpoint connection-report assembly through BepInEx's persistent main-thread queue until after `SpawnPlayer` returns, with a generation guard against mixing a newer session's detail.
+
 ## 1.1.2
 
 - Added observation-only spawn-readiness diagnostics for the interval between `_RequestRespawn` activation and `SpawnPlayer`, plus connection-wide minimap call timing.

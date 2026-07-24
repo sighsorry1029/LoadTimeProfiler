@@ -10,9 +10,11 @@ It starts before normal BepInEx plugins and writes an easy-to-read timing report
 - Measures the trip from the lobby to a playable world.
 - Measures dedicated server startup until the server is ready.
 - Shows how much time individual mods spend during plugin setup, including construction, `Awake`, `OnEnable`, and `Start`.
+- Shows per-mod synchronous Harmony callback time inside `FejdStartup.Awake`, without scanning unrelated methods.
 - Shows per-mod synchronous work during the important `ZNetScene.Awake` and `ObjectDB.Awake` loading stages.
+- Starts AzuAntiCheat 4.3.11's per-plugin SHA-256 work in one background worker as plugin DLLs become available, then revalidates each same-launch result before use.
+- Measures only FastAssetBundleLoader's original-source bundle hashing during startup; cache-output verification hashes are excluded.
 - Records a timeline of major Valheim loading stages, making long pauses easier to spot.
-- Separates the final spawn wait into the built-in respawn gate, target-zone readiness, locally known valid ZDOs still lacking instantiated scene objects, and minimap cache or generation calls.
 - Keeps the latest 10 reports so you can compare runs before and after changing your mod list.
 - Caches localization CSV work without replacing Valheim's active translation dictionary or suppressing other mods' localization callbacks.
 - Coalesces only automatic BepInEx config writes during `Chainloader.Start`; explicit saves and each plugin's `SaveOnConfigSet` policy remain intact.
@@ -57,7 +59,7 @@ BepInEx/config/sighsorry.LoadTimeProfiler.cfg
 
 There is one setting:
 
-- `General.Enabled = true` enables timing reports, the safe localization cache, Chainloader-scoped config-write coalescing, and minimal connection protection. Set it to `false` to disable all LoadTimeProfiler runtime hooks and report-file creation. Changes apply on the next launch.
+- `General.Enabled = true` enables all timing diagnostics, the safe localization cache, same-launch AzuAntiCheat prehash, Chainloader-scoped config-write coalescing, and minimal connection protection. Set it to `false` to disable all LoadTimeProfiler runtime hooks and report-file creation. Changes apply on the next launch.
 
 Connection protection uses a fixed 90-second floor. Existing limits longer than 90 seconds are preserved, and fragment-cache lifetimes are not changed. Previous per-feature settings are removed automatically when the configuration is next loaded.
 
@@ -96,22 +98,18 @@ Connection protection is local. Install the same build on both endpoints when yo
 
 - **Plugin construction/Awake/OnEnable** shows time spent while BepInEx creates and enables each plugin.
 - **Plugin Start** shows measured work from plugin `Start` methods.
+- **AzuAntiCheat asynchronous prehash** shows background completion, main-thread wait, verified hits, invalidations, and synchronous fallbacks.
+- **FastAssetBundleLoader original-source hashing** shows call count, bytes, total time, and the slowest original bundle hashes.
+- **Scoped FejdStartup.Awake attribution** shows synchronous Harmony callback time assigned to mods and reports its own setup/bookkeeping cost separately.
 - **Timeline** shows the order and duration of major Valheim loading stages.
 - **Scoped deep attribution** shows synchronous Harmony callback time assigned to mods during `ZNetScene.Awake` and `ObjectDB.Awake`.
 - **Startup acceleration** reports safe localization-cache and automatic config-write activity.
 - **Localization CSV acceleration** reports cache hits, misses, replay time, and uncached parse time for the active phase.
 - **Connection outcome** separates normal connection time, time to the first failure decision, and the later return-to-lobby/error-display time.
 - **Connection stability** reports the fixed 90-second protection targets, preserved fragment behavior, installation time, and compatibility warnings.
-- **Spawn readiness diagnostics** separates the built-in respawn gate, zone and active-area readiness, locally known spawn-sector ZDO state, and minimap cache or generation work.
 - **Unattributed time** is work that cannot be safely assigned to one mod.
 
 The slowest entries are useful investigation targets. They are not automatic proof that a mod is broken; manager mods such as Jotunn may perform work on behalf of several other mods.
-
-For spawn-readiness diagnostics, `Target center zone first observed loaded` means the center zone around the current spawn target was observed as loaded. `Active area first observed loaded` is Valheim's broader active-area check. If `zoneLoaded=no` persists, the client is still waiting on target-zone readiness. If `zoneLoaded=yes` while `missing` falls toward zero before `IsAreaReady first true`, the remaining wait is consistent with locally known ZDOs receiving scene instances.
-
-The 3x3 ZDO counts include only objects already known to the local client; `uninstantiated valid` means valid received ZDO data did not yet have a local `ZNetView` instance. A zero value does not prove that the server has no additional objects still in transit.
-
-Minimap call detail is labeled relative to `_RequestRespawn` activation. A cache miss followed by `GenerateWorldMap calls: count=1` identifies the full map-generation path; its reported total is inclusive call time. These calls and the zone/ZDO readiness intervals can overlap.
 
 ## Example Report
 
@@ -203,6 +201,10 @@ LoadTimeProfiler safely assigns synchronous work that it can observe. Network wa
 
 Acceleration statistics describe work observed or coalesced in the current run; they are not a synthetic estimate of total time saved. Compare several runs with identical mod, world, and endpoint conditions.
 
+The AzuAntiCheat integration is intentionally limited to version 4.3.11 and its verified `File.ReadAllBytes`/SHA-256 call pair. It keeps no persistent digest cache, validates the original hash format at runtime, holds the hashed file against writes until consumption, and falls back to a fresh synchronous streaming hash on any mismatch or failure. Background I/O can overlap other startup work, so compare repeated runs to determine the net effect on a particular disk.
+
+FastAssetBundleLoader timing is diagnostic only. It observes the `ComputeHash(Stream)` call made inside `TryUseCachedBundle(Stream)` and does not change the hash, cache, or bundle-loading result.
+
 Connection timing begins when `FejdStartup.TransitionToMainScene` accepts the world transition, so pre-connection login, permission, warning, and selection prompts are not counted as a hanging connection attempt. Success reuses the existing `Game.SpawnPlayer` completion timestamp. Failure stores `Game.Logout` as a candidate timestamp and confirms it from the terminal status shown by `FejdStartup.ShowConnectError`; a benign return to the lobby is reported as cancelled. This event-based measurement does not poll connection state each frame.
 
-Spawn-readiness diagnostics are observation-only. Periodic sampling is limited to at most once per second, with an additional terminal sample when readiness completes. Counts cover only ZDOs already known locally in the target 3x3 sector area; they do not represent objects that may still be in transit from a remote server. Zone milestones therefore have up to roughly one second of sampling resolution. Zone, active-area, ZDO, and minimap timings can overlap and should not be added together.
+Completed connection reports are assembled on a later frame, after `SpawnPlayer` has returned, through BepInEx's persistent main-thread queue. A session-generation guard prevents a deferred report from mixing in a newer connection's detail.

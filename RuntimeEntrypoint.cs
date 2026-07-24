@@ -23,6 +23,7 @@ public static class RuntimeEntrypoint
             RuntimeHookInstaller.Install();
             StartupAcceleration.InstallBeforeChainloader();
             ConnectionStability.InstallBeforeChainloader();
+            FastAssetBundleHashProfiler.InstallBeforeChainloader();
             StartupAcceleration.BeginChainloader();
             ChainloaderProfiler.BeginChainloader();
 
@@ -83,6 +84,17 @@ public static class RuntimeEntrypoint
         }
 
         ChainloaderCompleted = true;
+        try
+        {
+            AzuAntiCheatPrehashAcceleration.CompletePluginDiscovery();
+        }
+        catch (Exception ex)
+        {
+            ProfilerLog.WriteLine(
+                "AzuAntiCheat prehash discovery completion failed open: " +
+                ex);
+        }
+
         StartupAcceleration.CheckLoadedCompatibility();
         try
         {
@@ -93,6 +105,17 @@ public static class RuntimeEntrypoint
             ProfilerLog.WriteLine("Connection stability integration failed: " + ex);
             LoadTimeProfilerPatcher.LogWarning(
                 "Connection stability integration failed: " + ex.Message);
+        }
+
+        try
+        {
+            FejdStartupAttributionProfiler.PrepareAfterChainloader();
+        }
+        catch (Exception ex)
+        {
+            ProfilerLog.WriteLine(
+                "FejdStartup attribution preparation failed open: " +
+                ex);
         }
 
         if (prepareServerAttribution)
@@ -119,6 +142,19 @@ public static class RuntimeEntrypoint
         {
             if (LoadTimeProfilerPatcher.AnyRuntimeFeatureEnabled)
             {
+                try
+                {
+                    AzuAntiCheatPrehashAcceleration
+                        .AbortAfterChainloaderFailure(
+                            exception.GetType().Name);
+                }
+                catch (Exception cleanupException)
+                {
+                    ProfilerLog.WriteLine(
+                        "AzuAntiCheat prehash failure cleanup failed: " +
+                        cleanupException);
+                }
+
                 try
                 {
                     ChainloaderProfiler.EndChainloader();
