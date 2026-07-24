@@ -388,7 +388,6 @@ internal static class TimelineProfiler
             ConnectionStability.AppendReport(builder, snapshot.Session);
             if (snapshot.Session == ProfileSession.Startup)
             {
-                AzuAntiCheatPrehashAcceleration.AppendStartupReport(builder);
                 ChainloaderProfiler.AppendStartupReport(builder);
             }
 

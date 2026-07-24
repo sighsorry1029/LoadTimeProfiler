@@ -83,17 +83,6 @@ public static class RuntimeEntrypoint
         }
 
         ChainloaderCompleted = true;
-        try
-        {
-            AzuAntiCheatPrehashAcceleration.CompletePluginDiscovery();
-        }
-        catch (Exception ex)
-        {
-            ProfilerLog.WriteLine(
-                "AzuAntiCheat prehash discovery completion failed open: " +
-                ex);
-        }
-
         StartupAcceleration.CheckLoadedCompatibility();
         try
         {
@@ -130,19 +119,6 @@ public static class RuntimeEntrypoint
         {
             if (LoadTimeProfilerPatcher.AnyRuntimeFeatureEnabled)
             {
-                try
-                {
-                    AzuAntiCheatPrehashAcceleration
-                        .AbortAfterChainloaderFailure(
-                            exception.GetType().Name);
-                }
-                catch (Exception cleanupException)
-                {
-                    ProfilerLog.WriteLine(
-                        "AzuAntiCheat prehash failure cleanup failed: " +
-                        cleanupException);
-                }
-
                 try
                 {
                     ChainloaderProfiler.EndChainloader();

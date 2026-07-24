@@ -91,7 +91,6 @@
     <Compile Include="DeepLobbyAttributionProfiler.cs" />
     <Compile Include="StartupAcceleration.cs" />
     <Compile Include="LocalizationAcceleration.cs" />
-    <Compile Include="AzuAntiCheatPrehashAcceleration.cs" />
     <Compile Include="ConnectionStability.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

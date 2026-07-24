@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.8
+
+- Removed the exact-version AzuAntiCheat same-launch prehash integration, its background worker, and its report section.
+- Restores AzuAntiCheat's original synchronous hash path while retaining normal plugin timing and the minimal 90-second AzuAntiCheat send-queue protection.
+
 ## 1.1.7
 
 - Removed the observation-only FastAssetBundleLoader hash diagnostic and both of its Harmony hooks after confirming that the loader and its cache are effective independently.

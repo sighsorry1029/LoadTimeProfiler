@@ -12,7 +12,6 @@ It starts before normal BepInEx plugins and writes an easy-to-read timing report
 - Shows how much time individual mods spend during plugin setup, including construction, `Awake`, `OnEnable`, and `Start`.
 - Measures the inclusive `FejdStartup.Awake` lifecycle stage without repatching third-party callbacks.
 - Shows per-mod synchronous work during the important `ZNetScene.Awake` and `ObjectDB.Awake` loading stages.
-- Starts AzuAntiCheat 4.3.11's per-plugin SHA-256 work in one background worker as plugin DLLs become available, then revalidates each same-launch result before use.
 - Records a timeline of major Valheim loading stages, making long pauses easier to spot.
 - Keeps the latest 10 reports so you can compare runs before and after changing your mod list.
 - Caches localization CSV work without replacing Valheim's active translation dictionary or suppressing other mods' localization callbacks.
@@ -58,7 +57,7 @@ BepInEx/config/sighsorry.LoadTimeProfiler.cfg
 
 There is one setting:
 
-- `General.Enabled = true` enables all timing diagnostics, the safe localization cache, same-launch AzuAntiCheat prehash, Chainloader-scoped config-write coalescing, and minimal connection protection. Set it to `false` to disable all LoadTimeProfiler runtime hooks and report-file creation. Changes apply on the next launch.
+- `General.Enabled = true` enables all timing diagnostics, the safe localization cache, Chainloader-scoped config-write coalescing, and minimal connection protection. Set it to `false` to disable all LoadTimeProfiler runtime hooks and report-file creation. Changes apply on the next launch.
 
 Connection protection uses a fixed 90-second floor. Existing limits longer than 90 seconds are preserved, and fragment-cache lifetimes are not changed. Previous per-feature settings are removed automatically when the configuration is next loaded.
 
@@ -97,7 +96,6 @@ Connection protection is local. Install the same build on both endpoints when yo
 
 - **Plugin construction/Awake/OnEnable** shows time spent while BepInEx creates and enables each plugin.
 - **Plugin Start** shows measured work from plugin `Start` methods.
-- **AzuAntiCheat asynchronous prehash** shows background completion, main-thread wait, verified hits, invalidations, and synchronous fallbacks.
 - **Lifecycle phases** includes the safe, inclusive `FejdStartup.Awake` duration.
 - **Timeline** shows the order and duration of major Valheim loading stages.
 - **Scoped deep attribution** shows synchronous Harmony callback time assigned to mods during `ZNetScene.Awake` and `ObjectDB.Awake`.
@@ -198,8 +196,6 @@ The scoped attribution rows use `ObjectDB + ZNetScene` order. For example, DataF
 LoadTimeProfiler safely assigns synchronous work that it can observe. Network waits, coroutine continuations, background work, vanilla work, transpiled code, and work completed before the patcher starts may remain unattributed. Work delegated through another framework may be listed under that framework instead of the mod that requested it.
 
 Acceleration statistics describe work observed or coalesced in the current run; they are not a synthetic estimate of total time saved. Compare several runs with identical mod, world, and endpoint conditions.
-
-The AzuAntiCheat integration is intentionally limited to version 4.3.11 and its verified `File.ReadAllBytes`/SHA-256 call pair. It keeps no persistent digest cache, validates the original hash format at runtime, holds the hashed file against writes until consumption, and falls back to a fresh synchronous streaming hash on any mismatch or failure. Background I/O can overlap other startup work, so compare repeated runs to determine the net effect on a particular disk.
 
 Connection timing begins when `FejdStartup.TransitionToMainScene` accepts the world transition, so pre-connection login, permission, warning, and selection prompts are not counted as a hanging connection attempt. Success reuses the existing `Game.SpawnPlayer` completion timestamp. Failure stores `Game.Logout` as a candidate timestamp and confirms it from the terminal status shown by `FejdStartup.ShowConnectError`; a benign return to the lobby is reported as cancelled. This event-based measurement does not poll connection state each frame.
 
