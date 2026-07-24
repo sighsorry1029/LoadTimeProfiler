@@ -49,7 +49,6 @@ internal static class TimelineProfiler
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Startup);
         ChainloaderProfiler.ResetSession();
         StartupAcceleration.ResetSession(ProfileSession.Startup);
-        FastAssetBundleHashProfiler.ResetSession(ProfileSession.Startup);
         if (dedicatedServer)
         {
             DeepLobbyAttributionProfiler.ResetSession();
@@ -390,9 +389,6 @@ internal static class TimelineProfiler
             if (snapshot.Session == ProfileSession.Startup)
             {
                 AzuAntiCheatPrehashAcceleration.AppendStartupReport(builder);
-                FastAssetBundleHashProfiler.AppendReport(
-                    builder,
-                    snapshot.Session);
                 ChainloaderProfiler.AppendStartupReport(builder);
             }
 

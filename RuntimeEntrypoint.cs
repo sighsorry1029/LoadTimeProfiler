@@ -23,7 +23,6 @@ public static class RuntimeEntrypoint
             RuntimeHookInstaller.Install();
             StartupAcceleration.InstallBeforeChainloader();
             ConnectionStability.InstallBeforeChainloader();
-            FastAssetBundleHashProfiler.InstallBeforeChainloader();
             StartupAcceleration.BeginChainloader();
             ChainloaderProfiler.BeginChainloader();
 

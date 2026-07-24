@@ -1,5 +1,10 @@
 # Changelog
 
+## 1.1.7
+
+- Removed the observation-only FastAssetBundleLoader hash diagnostic and both of its Harmony hooks after confirming that the loader and its cache are effective independently.
+- Keeps FastAssetBundleLoader behavior untouched and retains the AzuAntiCheat same-launch asynchronous prehash.
+
 ## 1.1.6
 
 - Removed the 1.1.5 per-callback `FejdStartup.Awake` instrumentation after its Harmony detours could trigger a native Mono crash immediately after BepInEx chainloader startup.
