@@ -8,7 +8,7 @@ namespace LoadTimeProfiler;
 
 internal static class ProfilerLog
 {
-    private const int MaximumRetainedLogs = 10;
+    private const int MaximumRetainedLogs = 20;
     private static readonly object Lock = new();
     private static StreamWriter? _writer;
 
@@ -37,14 +37,6 @@ internal static class ProfilerLog
                 _writer.WriteLine($"Process: {Paths.ProcessName}");
                 _writer.WriteLine($"Mode: {(LoadTimeProfilerPatcher.IsDedicatedServer ? "Dedicated server" : "Client")}");
                 _writer.WriteLine($"BepInEx: {typeof(BaseUnityPlugin).Assembly.GetName().Version}");
-                _writer.WriteLine(LoadTimeProfilerPatcher.IsDedicatedServer
-                    ? "Coverage: BepInEx plugin construction/Awake/OnEnable, plugin Start methods, dedicated server lifecycle execution, and milestone intervals."
-                    : "Coverage: BepInEx plugin construction/Awake/OnEnable, plugin Start methods, selected client lifecycle execution, and milestone intervals.");
-                _writer.WriteLine("Deep attribution instruments existing synchronous Harmony callbacks in ObjectDB.Awake and ZNetScene.Awake.");
-                _writer.WriteLine(
-                    "Startup acceleration: safe localization cache and config write coalescing enabled.");
-                _writer.WriteLine(
-                    "Connection stability: minimal fixed 90-second timeout floor; fragment cache behavior unchanged.");
                 _writer.WriteLine();
             }
             catch (Exception ex)
@@ -108,6 +100,15 @@ internal static class ProfilerLog
                 LoadTimeProfilerPatcher.LogWarning($"Could not write profiler log: {ex.Message}");
                 DisposeWriter();
             }
+        }
+    }
+
+    internal static void WriteWarning(string text)
+    {
+        WriteLine(text);
+        if (!LoadTimeProfilerPatcher.ProfilingEnabled)
+        {
+            LoadTimeProfilerPatcher.LogWarning(text);
         }
     }
 

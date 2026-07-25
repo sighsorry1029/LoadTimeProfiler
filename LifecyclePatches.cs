@@ -21,6 +21,21 @@ internal static class LifecyclePatches
         }
     }
 
+    internal static bool IsStartupCompletionTarget(
+        MethodBase method)
+    {
+        if (!TargetsByMethod.TryGetValue(
+                method,
+                out LifecycleTarget target))
+        {
+            return false;
+        }
+
+        return LoadTimeProfilerPatcher.IsDedicatedServer
+            ? target.DedicatedStartupCompletion
+            : target.CompletesStartup;
+    }
+
     internal static void Enter(
         MethodBase method,
         object[] arguments)
@@ -70,26 +85,46 @@ internal static class LifecyclePatches
         MethodBase method,
         Exception? exception)
     {
-        if (!LoadTimeProfilerPatcher.ProfilingEnabled || !TargetsByMethod.TryGetValue(method, out LifecycleTarget target))
+        if (!TargetsByMethod.TryGetValue(
+                method,
+                out LifecycleTarget target))
         {
+            return;
+        }
+
+        bool dedicatedServer = LoadTimeProfilerPatcher.IsDedicatedServer;
+        bool completesStartup =
+            !dedicatedServer && target.CompletesStartup ||
+            dedicatedServer && target.DedicatedStartupCompletion;
+        if (!LoadTimeProfilerPatcher.ProfilingEnabled)
+        {
+            if (completesStartup)
+            {
+                StartupAcceleration.EndStartupScope();
+            }
+
             return;
         }
 
         DeepLobbyAttributionProfiler.EndTarget(method);
         LifecyclePhaseProfiler.EndTarget(method);
 
-        bool dedicatedServer = LoadTimeProfilerPatcher.IsDedicatedServer;
-        bool completesStartup = !dedicatedServer && target.CompletesStartup ||
-                                dedicatedServer && target.DedicatedStartupCompletion;
         if (completesStartup)
         {
-            if (exception == null)
+            try
             {
-                TimelineProfiler.CompleteStartup(target.Label + " complete");
+                if (exception == null)
+                {
+                    TimelineProfiler.CompleteStartup(target.Label + " complete");
+                }
+                else
+                {
+                    TimelineProfiler.AbortStartup(target.Label + " failed: " + exception.GetType().Name);
+                }
             }
-            else
+            finally
             {
-                TimelineProfiler.AbortStartup(target.Label + " failed: " + exception.GetType().Name);
+                StartupAcceleration.EndStartupScope();
             }
         }
 

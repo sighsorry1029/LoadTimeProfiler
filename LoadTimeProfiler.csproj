@@ -91,6 +91,8 @@
     <Compile Include="DeepLobbyAttributionProfiler.cs" />
     <Compile Include="StartupAcceleration.cs" />
     <Compile Include="LocalizationAcceleration.cs" />
+    <Compile Include="LocalizationAdapterRegistry.cs" />
+    <Compile Include="LocalizationAdapters.cs" />
     <Compile Include="ConnectionStability.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

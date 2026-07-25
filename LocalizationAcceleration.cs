@@ -1,13 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
-using System.Text;
 using System.Threading;
-using BepInEx.Bootstrap;
 using HarmonyLib;
 using UnityEngine;
 
@@ -37,27 +34,17 @@ internal static class LocalizationAcceleration
     [ThreadStatic]
     private static Stack<LoadState>? _activeLoads;
 
-    private static long _startupHits;
-    private static long _startupMisses;
-    private static long _startupReplayTicks;
-    private static long _startupParseTicks;
-    private static long _startupReplayedWords;
-    private static long _connectionHits;
-    private static long _connectionMisses;
-    private static long _connectionReplayTicks;
-    private static long _connectionParseTicks;
-    private static long _connectionReplayedWords;
     private static bool _installed;
-    private static bool _legacyLocalizationCacheDetected;
     private static bool _foreignBodyPatchDetected;
     private static int _foreignBodyPatchWarningLogged;
+    private static int _directReplaySafety;
 
     internal static bool Install(Harmony harmony)
     {
         if (TranslationsField == null ||
             TranslationsField.FieldType != typeof(Dictionary<string, string>))
         {
-            ProfilerLog.WriteLine(
+            ProfilerLog.WriteWarning(
                 "Localization acceleration disabled: Localization.m_translations has an unsupported layout.");
             return false;
         }
@@ -79,7 +66,7 @@ internal static class LocalizationAcceleration
             finalizer == null ||
             addWordPostfix == null)
         {
-            ProfilerLog.WriteLine("Localization acceleration disabled: required LoadCSV methods were not found.");
+            ProfilerLog.WriteWarning("Localization acceleration disabled: required LoadCSV methods were not found.");
             return false;
         }
 
@@ -98,8 +85,6 @@ internal static class LocalizationAcceleration
                 finalizer: new HarmonyMethod(finalizer) { priority = int.MaxValue },
                 ilmanipulator: null);
             _installed = true;
-            ProfilerLog.WriteLine(
-                "Localization acceleration installed: cached AddWord sequences preserve the active dictionary and foreign patches.");
             return true;
         }
         catch (Exception ex)
@@ -111,97 +96,14 @@ internal static class LocalizationAcceleration
             }
             catch (Exception rollbackException)
             {
-                ProfilerLog.WriteLine(
+                ProfilerLog.WriteWarning(
                     "Localization acceleration rollback warning: " + rollbackException.Message);
             }
 
             _installed = false;
-            ProfilerLog.WriteLine("Localization acceleration disabled: " + ex);
+            ProfilerLog.WriteWarning("Localization acceleration disabled: " + ex);
             return false;
         }
-    }
-
-    internal static void ResetSession(ProfileSession session)
-    {
-        if (session == ProfileSession.Startup)
-        {
-            Interlocked.Exchange(ref _startupHits, 0);
-            Interlocked.Exchange(ref _startupMisses, 0);
-            Interlocked.Exchange(ref _startupReplayTicks, 0);
-            Interlocked.Exchange(ref _startupParseTicks, 0);
-            Interlocked.Exchange(ref _startupReplayedWords, 0);
-            return;
-        }
-
-        Interlocked.Exchange(ref _connectionHits, 0);
-        Interlocked.Exchange(ref _connectionMisses, 0);
-        Interlocked.Exchange(ref _connectionReplayTicks, 0);
-        Interlocked.Exchange(ref _connectionParseTicks, 0);
-        Interlocked.Exchange(ref _connectionReplayedWords, 0);
-    }
-
-    internal static void AppendReport(StringBuilder builder, ProfileSession session)
-    {
-        long hits;
-        long misses;
-        long replayTicks;
-        long parseTicks;
-        long replayedWords;
-        if (session == ProfileSession.Startup)
-        {
-            hits = Interlocked.Read(ref _startupHits);
-            misses = Interlocked.Read(ref _startupMisses);
-            replayTicks = Interlocked.Read(ref _startupReplayTicks);
-            parseTicks = Interlocked.Read(ref _startupParseTicks);
-            replayedWords = Interlocked.Read(ref _startupReplayedWords);
-        }
-        else
-        {
-            hits = Interlocked.Read(ref _connectionHits);
-            misses = Interlocked.Read(ref _connectionMisses);
-            replayTicks = Interlocked.Read(ref _connectionReplayTicks);
-            parseTicks = Interlocked.Read(ref _connectionParseTicks);
-            replayedWords = Interlocked.Read(ref _connectionReplayedWords);
-        }
-
-        builder.AppendLine("Localization CSV acceleration:");
-        if (_legacyLocalizationCacheDetected)
-        {
-            builder.AppendLine(
-                "  Bypassed because legacy MSchmoecker LocalizationCache is loaded.");
-            return;
-        }
-
-        if (_foreignBodyPatchDetected)
-        {
-            builder.AppendLine(
-                "  Bypassed after a foreign patch was detected on CSV body work.");
-            return;
-        }
-
-        if (!LoadTimeProfilerPatcher.LocalizationCacheEnabled)
-        {
-            builder.AppendLine("  Disabled by config.");
-            return;
-        }
-
-        if (!_installed)
-        {
-            builder.AppendLine(
-                "  Not installed (unsupported layout or compatibility conflict).");
-            return;
-        }
-
-        builder.Append("  Cache hits/misses: ")
-            .Append(hits)
-            .Append('/')
-            .AppendLine(misses.ToString());
-        builder.Append("  Cached delta replay: ")
-            .Append(TimelineProfiler.FormatDuration(ToMilliseconds(replayTicks)))
-            .Append(", assignments/removals applied=")
-            .AppendLine(replayedWords.ToString());
-        builder.Append("  Uncached CSV work observed: ")
-            .AppendLine(TimelineProfiler.FormatDuration(ToMilliseconds(parseTicks)));
     }
 
     internal static void BeginLoad(
@@ -214,9 +116,7 @@ internal static class LocalizationAcceleration
         {
             Instance = instance,
             File = file,
-            Language = language,
-            SessionMask = TimelineProfiler.GetActiveSessionMask(),
-            StartedTimestamp = Stopwatch.GetTimestamp()
+            Language = language
         };
 
         try
@@ -233,13 +133,14 @@ internal static class LocalizationAcceleration
             {
                 state.Cacheable = true;
                 state.BeforeDictionary = translations;
+                RefreshDirectReplayCompatibility();
                 if (HasUnsafeForeignBodyPatches())
                 {
                     state.Cacheable = false;
                     _foreignBodyPatchDetected = true;
                     if (Interlocked.Exchange(ref _foreignBodyPatchWarningLogged, 1) == 0)
                     {
-                        ProfilerLog.WriteLine(
+                        ProfilerLog.WriteWarning(
                             "Localization acceleration stopped fail-open after a foreign CSV body patch was detected.");
                     }
                 }
@@ -264,15 +165,10 @@ internal static class LocalizationAcceleration
         catch (Exception ex)
         {
             state.Cacheable = false;
-            ProfilerLog.WriteLine("Localization cache prefix warning: " + ex.Message);
+            ProfilerLog.WriteWarning("Localization cache prefix warning: " + ex.Message);
         }
 
         (_activeLoads ??= new Stack<LoadState>()).Push(state);
-    }
-
-    internal static void NoteLegacyLocalizationCache()
-    {
-        _legacyLocalizationCacheDetected = true;
     }
 
     internal static bool TryReplayCurrent()
@@ -290,7 +186,6 @@ internal static class LocalizationAcceleration
             return false;
         }
 
-        long started = Stopwatch.GetTimestamp();
         try
         {
             if (TranslationsField?.GetValue(state.Instance) is not Dictionary<string, string> translations)
@@ -310,16 +205,13 @@ internal static class LocalizationAcceleration
             }
 
             state.Replayed = true;
-            state.ReplayedWordCount =
-                state.CacheEntry.RemovedKeys.Length + state.CacheEntry.Writes.Length;
-            state.ReplayTicks = Stopwatch.GetTimestamp() - started;
             return true;
         }
         catch (Exception ex)
         {
             state.CacheEntry = null;
             state.Replayed = false;
-            ProfilerLog.WriteLine("Localization cache replay warning; falling back to LoadCSV: " + ex.Message);
+            ProfilerLog.WriteWarning("Localization cache replay warning; falling back to LoadCSV: " + ex.Message);
             return false;
         }
     }
@@ -349,16 +241,9 @@ internal static class LocalizationAcceleration
 
         if (state.Replayed)
         {
-            Record(
-                state.SessionMask,
-                hit: true,
-                state.ReplayTicks,
-                state.ReplayedWordCount);
             return;
         }
 
-        long elapsed = Math.Max(0L, Stopwatch.GetTimestamp() - state.StartedTimestamp);
-        Record(state.SessionMask, hit: false, elapsed, 0);
         if (!succeeded ||
             state.Before == null ||
             state.File == null ||
@@ -389,7 +274,7 @@ internal static class LocalizationAcceleration
         }
         catch (Exception ex)
         {
-            ProfilerLog.WriteLine("Localization cache store warning: " + ex.Message);
+            ProfilerLog.WriteWarning("Localization cache store warning: " + ex.Message);
         }
     }
 
@@ -418,6 +303,74 @@ internal static class LocalizationAcceleration
         state.Writes.Add(new WriteOperation(key, value));
     }
 
+    internal static bool CanReplayDirectWrites()
+    {
+        if (!_installed ||
+            !LoadTimeProfilerPatcher.LocalizationCacheEnabled)
+        {
+            return false;
+        }
+
+        int safety = Volatile.Read(ref _directReplaySafety);
+        if (safety != 0)
+        {
+            return safety == 1;
+        }
+
+        return !HasUnsafeForeignBodyPatches();
+    }
+
+    internal static void FinalizeLoadedCompatibility()
+    {
+        RefreshDirectReplayCompatibility();
+    }
+
+    internal static bool RefreshDirectReplayCompatibility()
+    {
+        if (!_installed ||
+            Volatile.Read(ref _directReplaySafety) == 2)
+        {
+            Volatile.Write(ref _directReplaySafety, 2);
+            return false;
+        }
+
+        bool safe = !DetectUnsafeForeignBodyPatches();
+        Volatile.Write(ref _directReplaySafety, safe ? 1 : 2);
+        if (safe)
+        {
+            return true;
+        }
+
+        _foreignBodyPatchDetected = true;
+        if (Interlocked.Exchange(
+                ref _foreignBodyPatchWarningLogged,
+                1) == 0)
+        {
+            ProfilerLog.WriteWarning(
+                "Localization acceleration stayed fail-open after loaded-mod Harmony compatibility validation.");
+        }
+
+        return false;
+    }
+
+    internal static bool TryGetTranslations(
+        Localization instance,
+        out Dictionary<string, string>? translations)
+    {
+        translations = null;
+        try
+        {
+            translations =
+                TranslationsField?.GetValue(instance) as
+                    Dictionary<string, string>;
+            return translations != null;
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
     private static bool PopState(LoadState state)
     {
         Stack<LoadState>? activeLoads = _activeLoads;
@@ -438,49 +391,19 @@ internal static class LocalizationAcceleration
         return false;
     }
 
-    private static void Record(
-        ProfileSessionMask sessionMask,
-        bool hit,
-        long elapsedTicks,
-        int replayedWords)
-    {
-        if ((sessionMask & ProfileSessionMask.Startup) != 0)
-        {
-            if (hit)
-            {
-                Interlocked.Increment(ref _startupHits);
-                Interlocked.Add(ref _startupReplayTicks, elapsedTicks);
-                Interlocked.Add(ref _startupReplayedWords, replayedWords);
-            }
-            else
-            {
-                Interlocked.Increment(ref _startupMisses);
-                Interlocked.Add(ref _startupParseTicks, elapsedTicks);
-            }
-        }
-
-        if ((sessionMask & ProfileSessionMask.Connection) != 0)
-        {
-            if (hit)
-            {
-                Interlocked.Increment(ref _connectionHits);
-                Interlocked.Add(ref _connectionReplayTicks, elapsedTicks);
-                Interlocked.Add(ref _connectionReplayedWords, replayedWords);
-            }
-            else
-            {
-                Interlocked.Increment(ref _connectionMisses);
-                Interlocked.Add(ref _connectionParseTicks, elapsedTicks);
-            }
-        }
-    }
-
-    private static double ToMilliseconds(long ticks)
-    {
-        return ticks * 1000d / Stopwatch.Frequency;
-    }
-
     private static bool HasUnsafeForeignBodyPatches()
+    {
+        int finalizedSafety = Volatile.Read(
+            ref _directReplaySafety);
+        if (finalizedSafety != 0)
+        {
+            return finalizedSafety == 2;
+        }
+
+        return DetectUnsafeForeignBodyPatches();
+    }
+
+    private static bool DetectUnsafeForeignBodyPatches()
     {
         if (_foreignBodyPatchDetected)
         {
@@ -489,11 +412,6 @@ internal static class LocalizationAcceleration
 
         try
         {
-            if (Chainloader.PluginInfos.ContainsKey("com.maxsch.valheim.LocalizationCache"))
-            {
-                return true;
-            }
-
             if (AddWordMethod != null)
             {
                 Patches? addWordPatches = Harmony.GetPatchInfo(AddWordMethod);
@@ -536,7 +454,7 @@ internal static class LocalizationAcceleration
         }
         catch (Exception ex)
         {
-            ProfilerLog.WriteLine(
+            ProfilerLog.WriteWarning(
                 "Localization cache compatibility check warning; bypassing cache: " + ex.Message);
             return true;
         }
@@ -549,14 +467,10 @@ internal static class LocalizationAcceleration
         internal Localization Instance = null!;
         internal TextAsset? File;
         internal string Language = string.Empty;
-        internal ProfileSessionMask SessionMask;
         internal Dictionary<string, string>? Before;
         internal Dictionary<string, string>? BeforeDictionary;
         internal List<WriteOperation>? Writes;
         internal CacheEntry? CacheEntry;
-        internal long StartedTimestamp;
-        internal long ReplayTicks;
-        internal int ReplayedWordCount;
         internal bool Cacheable;
         internal bool BodyEntered;
         internal bool Replayed;
@@ -668,5 +582,9 @@ internal static class LocalizationAddWordCapturePatch
     internal static void Postfix(string key, string text, bool __runOriginal)
     {
         LocalizationAcceleration.CaptureAddWord(key, text, __runOriginal);
+        LocalizationAdapterRegistry.CaptureAddWord(
+            key,
+            text,
+            __runOriginal);
     }
 }

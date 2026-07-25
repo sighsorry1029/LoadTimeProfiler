@@ -333,9 +333,35 @@ internal static class ChainloaderProfiler
 
 internal static class LoadTimeProfilerPluginInitializationPatch
 {
+    internal static void LocalizationDiscoveryPrefix(
+        GameObject __instance,
+        Type componentType)
+    {
+        ObserveLocalizationPlugin(__instance, componentType);
+    }
+
     internal static void Prefix(GameObject __instance, Type componentType, out ChainloaderProfiler.PluginInitializationState? __state)
     {
+        ObserveLocalizationPlugin(__instance, componentType);
         __state = ChainloaderProfiler.BeginPlugin(__instance, componentType);
+    }
+
+    private static void ObserveLocalizationPlugin(
+        GameObject gameObject,
+        Type componentType)
+    {
+        try
+        {
+            LocalizationAdapterRegistry.ObservePluginComponent(
+                gameObject,
+                componentType);
+        }
+        catch (Exception ex)
+        {
+            ProfilerLog.WriteLine(
+                "Localization adapter plugin boundary warning: " +
+                ex.GetBaseException().Message);
+        }
     }
 
     internal static void Postfix(ChainloaderProfiler.PluginInitializationState? __state)

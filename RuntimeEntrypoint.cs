@@ -18,13 +18,31 @@ public static class RuntimeEntrypoint
             }
 
             LoadTimeProfilerPatcher.AttachBepInExLogger();
-            ProfilerLog.WriteLine(
-                "Chainloader runtime entrypoint reached. Installing profiling, acceleration, and stability hooks.");
-            RuntimeHookInstaller.Install();
-            StartupAcceleration.InstallBeforeChainloader();
-            ConnectionStability.InstallBeforeChainloader();
-            StartupAcceleration.BeginChainloader();
-            ChainloaderProfiler.BeginChainloader();
+            if (LoadTimeProfilerPatcher.RuntimeInstrumentationNeeded)
+            {
+                RuntimeHookInstaller.Install();
+            }
+
+            if (LoadTimeProfilerPatcher.ProfilingEnabled ||
+                LoadTimeProfilerPatcher.StartupAccelerationEnabled)
+            {
+                StartupAcceleration.InstallBeforeChainloader();
+            }
+
+            if (LoadTimeProfilerPatcher.TimeoutProtectionEnabled)
+            {
+                ConnectionStability.InstallBeforeChainloader();
+            }
+
+            if (LoadTimeProfilerPatcher.StartupAccelerationEnabled)
+            {
+                StartupAcceleration.BeginChainloader();
+            }
+
+            if (LoadTimeProfilerPatcher.ProfilingEnabled)
+            {
+                ChainloaderProfiler.BeginChainloader();
+            }
 
             _chainloaderStarted = true;
         }
@@ -40,6 +58,10 @@ public static class RuntimeEntrypoint
                     "Startup acceleration cleanup after initialization failure also failed: " +
                     cleanupException);
             }
+            finally
+            {
+                StartupAcceleration.AbortStartupScope();
+            }
 
             RuntimeHookInstaller.RemovePluginConstructionHook();
             ProfilerLog.WriteLine("Runtime hook initialization failed: " + ex);
@@ -54,20 +76,36 @@ public static class RuntimeEntrypoint
             return;
         }
 
-        bool prepareServerAttribution = _chainloaderStarted &&
-                                        LoadTimeProfilerPatcher.IsDedicatedServer;
-        try
+        bool prepareServerAttribution =
+            LoadTimeProfilerPatcher.ProfilingEnabled &&
+            _chainloaderStarted &&
+            LoadTimeProfilerPatcher.IsDedicatedServer;
+        if (LoadTimeProfilerPatcher.StartupAccelerationEnabled)
         {
-            StartupAcceleration.EndChainloader();
-        }
-        catch (Exception ex)
-        {
-            ProfilerLog.WriteLine("Startup acceleration completion failed: " + ex);
+            try
+            {
+                StartupAcceleration.EndChainloader();
+            }
+            catch (Exception ex)
+            {
+                ProfilerLog.WriteWarning("Startup acceleration completion failed: " + ex);
+            }
+
+            try
+            {
+                StartupAcceleration.AfterChainloaderStart();
+            }
+            catch (Exception ex)
+            {
+                ProfilerLog.WriteWarning(
+                    "Localization adapter reconciliation failed: " + ex);
+            }
         }
 
         try
         {
-            if (_chainloaderStarted)
+            if (_chainloaderStarted &&
+                LoadTimeProfilerPatcher.ProfilingEnabled)
             {
                 ChainloaderProfiler.EndChainloader();
             }
@@ -83,16 +121,18 @@ public static class RuntimeEntrypoint
         }
 
         ChainloaderCompleted = true;
-        StartupAcceleration.CheckLoadedCompatibility();
-        try
+        if (LoadTimeProfilerPatcher.TimeoutProtectionEnabled)
         {
-            ConnectionStability.InstallLoadedModIntegrations();
-        }
-        catch (Exception ex)
-        {
-            ProfilerLog.WriteLine("Connection stability integration failed: " + ex);
-            LoadTimeProfilerPatcher.LogWarning(
-                "Connection stability integration failed: " + ex.Message);
+            try
+            {
+                ConnectionStability.InstallLoadedModIntegrations();
+            }
+            catch (Exception ex)
+            {
+                ProfilerLog.WriteLine("Connection stability integration failed: " + ex);
+                LoadTimeProfilerPatcher.LogWarning(
+                    "Connection stability integration failed: " + ex.Message);
+            }
         }
 
         if (prepareServerAttribution)
@@ -117,7 +157,7 @@ public static class RuntimeEntrypoint
 
         try
         {
-            if (LoadTimeProfilerPatcher.AnyRuntimeFeatureEnabled)
+            if (LoadTimeProfilerPatcher.ProfilingEnabled)
             {
                 try
                 {
@@ -142,6 +182,10 @@ public static class RuntimeEntrypoint
         {
             _chainloaderStarted = false;
             RuntimeHookInstaller.RemovePluginConstructionHook();
+            if (LoadTimeProfilerPatcher.StartupAccelerationEnabled)
+            {
+                StartupAcceleration.AbortStartupScope();
+            }
         }
     }
 }

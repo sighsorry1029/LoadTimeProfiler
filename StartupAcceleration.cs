@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
-using System.Text;
 using BepInEx;
 using BepInEx.Bootstrap;
 using BepInEx.Configuration;
@@ -20,18 +19,14 @@ internal static class StartupAcceleration
         new(ReferenceComparer<ConfigFile>.Instance);
 
     private static bool _installed;
-    private static bool _legacyStartupAcceleratorDetected;
     private static bool _scopeActive;
     private static bool _boundaryInstalled;
     private static bool _localizationInstalled;
+    private static bool _localizationAdaptersInstalled;
+    private static bool _localizationAdapterScopeStarted;
     private static bool _configHooksInstalled;
     private static MethodInfo? _configSaveMethod;
     private static bool _configCompatibilityBypassed;
-    private static bool _configScopeStarted;
-    private static bool _configFlushCompleted;
-    private static int _configFiles;
-    private static int _automaticWritesCoalesced;
-    private static double _configFlushMilliseconds;
 
     internal static void InstallBeforeChainloader()
     {
@@ -45,43 +40,67 @@ internal static class StartupAcceleration
             _installed = true;
         }
 
-        _boundaryInstalled = InstallChainloaderSafetyFinalizer();
-
-        if (HasPatchOwner("org.bepinex.patchers.startupaccelerator") ||
-            HasPatchOwner("org.bepinex.patchers.startupaccelerator.delayed_patcher"))
+        bool accelerationRequested =
+            LoadTimeProfilerPatcher.StartupAccelerationEnabled;
+        bool boundaryRequired =
+            LoadTimeProfilerPatcher.ProfilingEnabled ||
+            accelerationRequested;
+        if (boundaryRequired)
         {
-            _legacyStartupAcceleratorDetected = true;
-            ProfilerLog.WriteLine(
-                "Startup acceleration disabled: legacy Smoothbrain StartupAccelerator patches are already active. " +
-                "Remove the legacy DLL before enabling the integrated implementation.");
-            LoadTimeProfilerPatcher.LogWarning(
-                "Legacy StartupAccelerator detected; LoadTimeProfiler startup acceleration was disabled to avoid conflicts.");
+            _boundaryInstalled =
+                InstallChainloaderSafetyFinalizer();
+        }
+
+        if (!accelerationRequested)
+        {
             return;
         }
 
-        _localizationInstalled = LocalizationAcceleration.Install(Harmony);
-        _configHooksInstalled = InstallConfigHooks();
+        if (LoadTimeProfilerPatcher.LocalizationCacheEnabled)
+        {
+            _localizationInstalled =
+                LocalizationAcceleration.Install(Harmony);
+            _localizationAdaptersInstalled =
+                LocalizationAdapterRegistry.InstallBeforeChainloader();
+        }
+
+        if (LoadTimeProfilerPatcher.ConfigWriteCoalescingEnabled)
+        {
+            _configHooksInstalled = InstallConfigHooks();
+        }
     }
 
     internal static void BeginChainloader()
     {
         lock (Lock)
         {
-            _configFiles = 0;
-            _automaticWritesCoalesced = 0;
-            _configFlushMilliseconds = 0d;
-            _configFlushCompleted = false;
             _configCompatibilityBypassed = false;
             TrackedConfigs.Clear();
             _scopeActive =
+                LoadTimeProfilerPatcher.ConfigWriteCoalescingEnabled &&
                 _boundaryInstalled &&
                 _configHooksInstalled;
-            _configScopeStarted = _scopeActive;
         }
 
-        if (!_boundaryInstalled)
+        _localizationAdapterScopeStarted = false;
+        if (_localizationAdaptersInstalled &&
+            _boundaryInstalled &&
+            RuntimeHookInstaller.StartupCompletionHookInstalled)
         {
-            ProfilerLog.WriteLine(
+            LocalizationAdapterRegistry.BeginStartupScope();
+            _localizationAdapterScopeStarted = true;
+        }
+        else if (_localizationAdaptersInstalled)
+        {
+            LocalizationAdapterRegistry.AbortStartupScope();
+            ProfilerLog.WriteWarning(
+                "External localization producer acceleration stayed fail-open because an exception-safe startup boundary was unavailable.");
+        }
+
+        if (LoadTimeProfilerPatcher.StartupAccelerationEnabled &&
+            !_boundaryInstalled)
+        {
+            ProfilerLog.WriteWarning(
                 "Startup acceleration scopes were not started because the Chainloader safety boundary is unavailable.");
         }
     }
@@ -91,75 +110,64 @@ internal static class StartupAcceleration
         FlushConfigs();
     }
 
-    internal static void ResetSession(ProfileSession session)
+    internal static void AfterChainloaderStart()
     {
-        LocalizationAcceleration.ResetSession(session);
-    }
-
-    internal static void CheckLoadedCompatibility()
-    {
-        try
+        if (_localizationInstalled)
         {
-            if (!Chainloader.PluginInfos.ContainsKey("com.maxsch.valheim.LocalizationCache"))
-            {
-                return;
-            }
-
-            LocalizationAcceleration.NoteLegacyLocalizationCache();
-            ProfilerLog.WriteLine(
-                "Legacy MSchmoecker LocalizationCache detected; the integrated localization cache will stay bypassed.");
-            LoadTimeProfilerPatcher.LogWarning(
-                "Legacy LocalizationCache detected; remove it to use LoadTimeProfiler localization acceleration.");
+            LocalizationAcceleration.FinalizeLoadedCompatibility();
         }
-        catch (Exception ex)
+
+        if (_localizationAdapterScopeStarted &&
+            !RuntimeHookInstaller.IsStartupCompletionHookActive())
         {
-            ProfilerLog.WriteLine("Legacy localization cache detection warning: " + ex.Message);
+            ProfilerLog.WriteWarning(
+                "External localization producer acceleration stopped fail-open because its startup completion boundary was removed.");
+            AbortStartupScope();
+            return;
+        }
+
+        if (_localizationAdaptersInstalled &&
+            _localizationAdapterScopeStarted)
+        {
+            LocalizationAdapterRegistry.AfterChainloaderStart();
         }
     }
 
-    internal static void AppendReport(StringBuilder builder, ProfileSession session)
+    internal static void EndStartupScope()
     {
-        if (session == ProfileSession.Startup)
+        if (_localizationAdaptersInstalled &&
+            _localizationAdapterScopeStarted)
         {
-            builder.AppendLine("Startup acceleration:");
-            if (_legacyStartupAcceleratorDetected)
+            _localizationAdapterScopeStarted = false;
+            try
             {
-                builder.AppendLine(
-                    "  Disabled because legacy Smoothbrain StartupAccelerator patches were detected.");
-                builder.AppendLine(
-                    "  Integrated localization/config acceleration hooks were not installed.");
-                return;
+                LocalizationAdapterRegistry.EndStartupScope();
             }
-
-            if (!_configHooksInstalled)
+            catch (Exception ex)
             {
-                builder.AppendLine(
-                    "  Config write coalescing: hooks were not installed; original behavior retained.");
-            }
-            else if (!_configScopeStarted)
-            {
-                builder.AppendLine(
-                    "  Config write coalescing: hooks installed, but the exception-safe Chainloader scope did not start.");
-            }
-            else
-            {
-                builder.Append("  Config writes: files=")
-                    .Append(_configFiles)
-                    .Append(", automatic writes coalesced=")
-                    .Append(_automaticWritesCoalesced)
-                    .Append(", final flush=")
-                    .Append(TimelineProfiler.FormatDuration(_configFlushMilliseconds))
-                    .Append(", cleanup=")
-                    .AppendLine(_configFlushCompleted ? "completed" : "incomplete");
-                if (_configCompatibilityBypassed)
-                {
-                    builder.AppendLine(
-                        "  Config coalescing stopped fail-open after a foreign ConfigFile.Save patch was detected.");
-                }
+                ProfilerLog.WriteWarning(
+                    "Localization adapter startup cleanup warning: " +
+                    ex.GetBaseException().Message);
             }
         }
+    }
 
-        LocalizationAcceleration.AppendReport(builder, session);
+    internal static void AbortStartupScope()
+    {
+        if (_localizationAdaptersInstalled)
+        {
+            _localizationAdapterScopeStarted = false;
+            try
+            {
+                LocalizationAdapterRegistry.AbortStartupScope();
+            }
+            catch (Exception ex)
+            {
+                ProfilerLog.WriteWarning(
+                    "Localization adapter abort cleanup warning: " +
+                    ex.GetBaseException().Message);
+            }
+        }
     }
 
     internal static void ConfigConstructed(ConfigFile config)
@@ -172,7 +180,6 @@ internal static class StartupAcceleration
             }
 
             TrackedConfigs.Add(config, new TrackedConfig());
-            _configFiles++;
         }
     }
 
@@ -202,7 +209,7 @@ internal static class StartupAcceleration
 
             if (logWarning)
             {
-                ProfilerLog.WriteLine(
+                ProfilerLog.WriteWarning(
                     "Config write coalescing stopped fail-open because ConfigFile.Save has foreign Harmony ownership: " +
                     owners + ".");
             }
@@ -233,7 +240,6 @@ internal static class StartupAcceleration
             tracked.SkippedWrites++;
             tracked.Generation++;
             state = new ConfigSaveState(tracked.Generation);
-            _automaticWritesCoalesced++;
             return false;
         }
     }
@@ -289,7 +295,7 @@ internal static class StartupAcceleration
 
             if (HasForeignPatchOwner(save, Harmony.Id, out string owners))
             {
-                ProfilerLog.WriteLine(
+                ProfilerLog.WriteWarning(
                     "Startup config write coalescing disabled because ConfigFile.Save already has foreign Harmony ownership: " +
                     owners + ".");
                 return false;
@@ -303,13 +309,11 @@ internal static class StartupAcceleration
                 save,
                 prefix: new HarmonyMethod(savePrefix) { priority = int.MaxValue },
                 postfix: new HarmonyMethod(savePostfix) { priority = int.MaxValue });
-            ProfilerLog.WriteLine(
-                "Startup config write coalescing installed for automatic Bind/setting saves in Chainloader.Start.");
             return true;
         }
         catch (Exception ex)
         {
-            ProfilerLog.WriteLine("Startup config write coalescing disabled: " + ex);
+            ProfilerLog.WriteWarning("Startup config write coalescing disabled: " + ex);
             return false;
         }
     }
@@ -334,7 +338,7 @@ internal static class StartupAcceleration
         }
         catch (Exception ex)
         {
-            ProfilerLog.WriteLine(
+            ProfilerLog.WriteWarning(
                 "Startup acceleration warning: Chainloader exception safety finalizer was not installed: " + ex);
             return false;
         }
@@ -355,8 +359,6 @@ internal static class StartupAcceleration
             TrackedConfigs.Clear();
         }
 
-        Stopwatch stopwatch = Stopwatch.StartNew();
-        int skippedWrites = 0;
         foreach (KeyValuePair<ConfigFile, TrackedConfig> pair in configs)
         {
             ConfigFile config = pair.Key;
@@ -368,24 +370,13 @@ internal static class StartupAcceleration
 
             try
             {
-                skippedWrites += tracked.SkippedWrites;
                 config.Save();
             }
             catch (Exception ex)
             {
-                ProfilerLog.WriteLine(
+                ProfilerLog.WriteWarning(
                     "Config coalescing flush warning for " + config.ConfigFilePath + ": " + ex.Message);
             }
-        }
-
-        stopwatch.Stop();
-        _configFlushMilliseconds = stopwatch.Elapsed.TotalMilliseconds;
-        _configFlushCompleted = true;
-        if (configs.Count > 0)
-        {
-            ProfilerLog.WriteLine(
-                $"Coalesced startup config writes for {configs.Count} files; " +
-                $"automatic writes={skippedWrites}, flush={stopwatch.Elapsed.TotalMilliseconds:0.###} ms.");
         }
     }
 
@@ -474,27 +465,6 @@ internal static class StartupAcceleration
             owners = "inspection failed (" + ex.GetType().Name + ")";
             return true;
         }
-    }
-
-    private static bool HasPatchOwner(string owner)
-    {
-        try
-        {
-            foreach (MethodBase method in Harmony.GetAllPatchedMethods())
-            {
-                Patches? patches = Harmony.GetPatchInfo(method);
-                if (patches != null && patches.Owners.Contains(owner))
-                {
-                    return true;
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            ProfilerLog.WriteLine("Legacy startup accelerator detection warning: " + ex.Message);
-        }
-
-        return false;
     }
 
     private sealed class TrackedConfig

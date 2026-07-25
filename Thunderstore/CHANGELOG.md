@@ -1,5 +1,66 @@
 # Changelog
 
+## 1.2.4
+
+- Increased automatic profile-log retention from 10 to 20 reports.
+- Refined the package description around faster startup, reliable world joins, and built-in profiling.
+
+## 1.2.3
+
+- Reworked the README into a shorter installation, configuration, compatibility, and report-reading guide.
+- Retained both the Start To Lobby and Lobby To World report examples.
+- Removed the remaining legacy-key guidance and retired internal identifier; the runtime and config schema are current-only.
+
+## 1.2.2
+
+- Added explicit manual overlap guidance to the three acceleration/protection config descriptions and the README.
+- Documents which LoadTimeProfiler setting to disable when StartupAccelerator, LocalizationCache, or TimeoutLimit is installed.
+- Keeps configuration authoritative: no runtime scan for these conflicting mods, automatic feature override, or additional config option was added.
+
+## 1.2.1
+
+- Simplified profile reports to measured loading and connection timings plus actionable compatibility warnings.
+- Removed acceleration, localization-cache, config-write, and timeout-protection installation status, hit counters, and internal processing-time sections because they do not measure end-to-end time saved.
+- Removed all legacy configuration migration and legacy-mod detection/bypass paths. Only the four current `General` settings are read; legacy keys are ignored.
+
+## 1.2.0
+
+- Replaced the single `General.Enabled` master switch with independent profiling, localization-cache, config-write-coalescing, and timeout-protection settings.
+- Profiling can now be disabled without disabling startup acceleration or connection protection; no report files or profiling-only runtime hooks are created in that mode.
+- Changed the default timeout floor from 90 to 120 seconds, made it configurable through `General.TimeoutProtectionSeconds`, and uses `0` to disable protection while preserving longer original limits.
+- Added safe migration from `General.Enabled` and older per-feature settings, including preservation of the previous all-disabled state.
+- Keeps only the minimal plugin-discovery and startup-completion hooks required by external localization caching when profiling is disabled.
+
+## 1.1.13
+
+- Removed the Jotunn localization producer adapter after its pre-`Awake` Harmony preparation was found to initialize `LocalizationManager` before `Jotunn.Main.Instance` existed.
+- Keeps Jotunn localization entirely on its original path while retaining the successfully exercised vanilla CSV, canonical `LocalizationManager.Localizer`, and manager-library `LocalizeKey` caches.
+- Prevents the resulting Jotunn `TypeInitializationException` cascade into dependent mods such as VNEI, STUWard, and content registrations.
+
+## 1.1.12
+
+- Extended startup localization acceleration to repeatedly invoked, canonical `LocalizationManager.Localizer`, Jotunn, and manager-library `LocalizeKey` producers.
+- Requires exact identities, method signatures, semantic fields, validated IL call flow, and actual Harmony callback registration; obfuscated AzuAntiCheat localization and stateful/side-effect variants stay on their original paths.
+- Added per-adapter fail-open isolation, mutation invalidation, exception-safe startup lifetime cleanup, cache-release on lobby arrival, and adapter installation/hit diagnostics.
+
+## 1.1.11
+
+- Removed the experimental `ObjectDB.Awake` and `ZNetScene.Awake` Harmony wrapper batching after warm comparisons showed only a small end-to-end startup improvement.
+- Restored immediate Harmony wrapper rebuild semantics and removed every `PatchFunctions.UpdateWrapper` hook, flush path, statistic, and report entry.
+- Retains the localization cache, automatic config-write coalescing, profiling, and fixed 90-second connection-timeout protection.
+
+## 1.1.10
+
+- Removed global `PatchFunctions.UpdateWrapper` timing, per-target dictionaries, physical-rebuild statistics, and the startup-only `UpdateWrapper` finalizer.
+- Retains exact `ObjectDB.Awake` and `ZNetScene.Awake` batching through a minimal prefix-only path; non-target requests now perform only fast target checks before continuing normally.
+- Keeps structural Harmony validation, first-rebuild materialization, exception-safe final flush, compatibility fallback, and concise exact-target flush diagnostics.
+
+## 1.1.9
+
+- Added structurally verified, Chainloader-scoped Harmony wrapper batching for only the exact parameterless `ObjectDB.Awake` and `ZNetScene.Awake` targets.
+- Added `PatchFunctions.UpdateWrapper` request, physical rebuild, avoided rebuild, target, and final flush diagnostics to the startup report.
+- Keeps the first rebuild for each exact target, every other Harmony target, and every background-thread patch request on its original immediate path; adds no configuration option and removes the diagnostic hook when Chainloader finishes.
+
 ## 1.1.8
 
 - Removed the exact-version AzuAntiCheat same-launch prehash integration, its background worker, and its report section.

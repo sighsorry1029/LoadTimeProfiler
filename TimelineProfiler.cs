@@ -48,7 +48,6 @@ internal static class TimelineProfiler
 
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Startup);
         ChainloaderProfiler.ResetSession();
-        StartupAcceleration.ResetSession(ProfileSession.Startup);
         if (dedicatedServer)
         {
             DeepLobbyAttributionProfiler.ResetSession();
@@ -87,7 +86,6 @@ internal static class TimelineProfiler
 
         LifecyclePhaseProfiler.ResetSession(ProfileSession.Connection);
         DeepLobbyAttributionProfiler.ResetSession();
-        StartupAcceleration.ResetSession(ProfileSession.Connection);
         lock (Lock)
         {
             double now = NowMilliseconds();
@@ -384,8 +382,6 @@ internal static class TimelineProfiler
         }
         if (reportDataCurrent)
         {
-            StartupAcceleration.AppendReport(builder, snapshot.Session);
-            ConnectionStability.AppendReport(builder, snapshot.Session);
             if (snapshot.Session == ProfileSession.Startup)
             {
                 ChainloaderProfiler.AppendStartupReport(builder);

@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Reflection;
 using HarmonyLib;
 using UnityEngine;
@@ -12,6 +13,41 @@ internal static class RuntimeHookInstaller
     private static bool _installed;
     private static MethodBase? _pluginConstructionTarget;
     private static bool _pluginConstructionPatched;
+    private static MethodBase? _startupCompletionTarget;
+
+    internal static bool StartupCompletionHookInstalled { get; private set; }
+
+    internal static bool IsStartupCompletionHookActive()
+    {
+        lock (Lock)
+        {
+            if (!StartupCompletionHookInstalled ||
+                _startupCompletionTarget == null)
+            {
+                return false;
+            }
+
+            try
+            {
+                Patches? patches =
+                    HarmonyLib.Harmony.GetPatchInfo(
+                        _startupCompletionTarget);
+                return patches != null &&
+                       patches.Finalizers.Any(patch =>
+                           string.Equals(
+                               patch.owner,
+                               Harmony.Id,
+                               StringComparison.Ordinal));
+            }
+            catch (Exception ex)
+            {
+                ProfilerLog.WriteWarning(
+                    "Runtime hook warning: could not revalidate the startup completion hook: " +
+                    ex.Message);
+                return false;
+            }
+        }
+    }
 
     internal static void Install()
     {
@@ -23,20 +59,18 @@ internal static class RuntimeHookInstaller
             }
 
             _installed = true;
-            int installed = 0;
-            int failed = 0;
-            if (TryPatchPluginConstruction())
+            bool profiling = LoadTimeProfilerPatcher.ProfilingEnabled;
+            bool localization =
+                LoadTimeProfilerPatcher.LocalizationCacheEnabled;
+            if (!profiling && !localization)
             {
-                installed++;
-            }
-            else
-            {
-                failed++;
+                return;
             }
 
-            PatchLifecycleTargets(ref installed, ref failed);
-            ProfilerLog.WriteLine(
-                $"Unity and Valheim runtime hook installation completed: installed={installed}, failed={failed}.");
+            TryPatchPluginConstruction(profiling);
+
+            PatchLifecycleTargets(
+                startupCompletionOnly: !profiling);
         }
     }
 
@@ -52,11 +86,10 @@ internal static class RuntimeHookInstaller
             try
             {
                 Harmony.Unpatch(_pluginConstructionTarget, HarmonyPatchType.All, Harmony.Id);
-                ProfilerLog.WriteLine("Removed the startup-only GameObject.AddComponent profiling hook.");
             }
             catch (Exception ex)
             {
-                ProfilerLog.WriteLine("Runtime hook warning: could not remove the plugin construction hook: " + ex.Message);
+                ProfilerLog.WriteWarning("Runtime hook warning: could not remove the plugin construction hook: " + ex.Message);
             }
             finally
             {
@@ -66,7 +99,8 @@ internal static class RuntimeHookInstaller
         }
     }
 
-    private static bool TryPatchPluginConstruction()
+    private static bool TryPatchPluginConstruction(
+        bool profiling)
     {
         try
         {
@@ -79,50 +113,83 @@ internal static class RuntimeHookInstaller
                 throw new MissingMethodException(typeof(GameObject).FullName, nameof(GameObject.AddComponent));
             }
 
-            Harmony.Patch(
-                target,
-                prefix: Highest(typeof(LoadTimeProfilerPluginInitializationPatch), "Prefix"),
-                postfix: Lowest(typeof(LoadTimeProfilerPluginInitializationPatch), "Postfix"),
-                finalizer: Lowest(typeof(LoadTimeProfilerPluginInitializationPatch), "Finalizer"));
+            if (profiling)
+            {
+                Harmony.Patch(
+                    target,
+                    prefix: Highest(
+                        typeof(LoadTimeProfilerPluginInitializationPatch),
+                        "Prefix"),
+                    postfix: Lowest(
+                        typeof(LoadTimeProfilerPluginInitializationPatch),
+                        "Postfix"),
+                    finalizer: Lowest(
+                        typeof(LoadTimeProfilerPluginInitializationPatch),
+                        "Finalizer"));
+            }
+            else
+            {
+                Harmony.Patch(
+                    target,
+                    prefix: Highest(
+                        typeof(LoadTimeProfilerPluginInitializationPatch),
+                        "LocalizationDiscoveryPrefix"));
+            }
+
             _pluginConstructionTarget = target;
             _pluginConstructionPatched = true;
             return true;
         }
         catch (Exception ex)
         {
-            ProfilerLog.WriteLine("Runtime hook warning: could not profile plugin construction: " + ex.Message);
+            ProfilerLog.WriteWarning("Runtime hook warning: could not install the plugin-boundary hook: " + ex.Message);
             return false;
         }
     }
 
-    private static void PatchLifecycleTargets(ref int installed, ref int failed)
+    private static void PatchLifecycleTargets(bool startupCompletionOnly)
     {
-        HarmonyMethod prefix;
+        HarmonyMethod? prefix = null;
         HarmonyMethod finalizer;
         try
         {
-            prefix = Highest(typeof(LoadTimeProfilerLifecyclePatch), "Prefix");
+            if (!startupCompletionOnly)
+            {
+                prefix = Highest(
+                    typeof(LoadTimeProfilerLifecyclePatch),
+                    "Prefix");
+            }
+
             finalizer = Lowest(typeof(LoadTimeProfilerLifecyclePatch), "Finalizer");
         }
         catch (Exception ex)
         {
-            failed++;
-            ProfilerLog.WriteLine("Runtime hook warning: could not prepare lifecycle hooks: " + ex.Message);
+            ProfilerLog.WriteWarning("Runtime hook warning: could not prepare lifecycle hooks: " + ex.Message);
             return;
         }
 
         foreach (MethodBase target in LifecyclePatches.GetTargets())
         {
+            if (startupCompletionOnly &&
+                !LifecyclePatches.IsStartupCompletionTarget(target))
+            {
+                continue;
+            }
+
             try
             {
                 Harmony.Patch(target, prefix: prefix, finalizer: finalizer);
-                installed++;
+                if (LifecyclePatches.IsStartupCompletionTarget(target))
+                {
+                    StartupCompletionHookInstalled = true;
+                    _startupCompletionTarget = target;
+                }
+
             }
             catch (Exception ex)
             {
-                failed++;
                 string targetName = (target.DeclaringType?.FullName ?? "<unknown>") + "." + target.Name;
-                ProfilerLog.WriteLine($"Runtime hook warning: could not patch {targetName}: {ex.Message}");
+                ProfilerLog.WriteWarning($"Runtime hook warning: could not patch {targetName}: {ex.Message}");
             }
         }
     }

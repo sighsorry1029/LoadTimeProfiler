@@ -1,12 +1,10 @@
 using System;
 using System.Collections.Generic;
-using System.Diagnostics;
 using System.Globalization;
 using System.Linq;
 using System.Reflection;
 using System.Reflection.Emit;
 using System.Runtime.CompilerServices;
-using System.Text;
 using BepInEx;
 using BepInEx.Bootstrap;
 using HarmonyLib;
@@ -14,7 +12,7 @@ using HarmonyLib;
 namespace LoadTimeProfiler;
 
 /// <summary>
-/// Applies a small, fixed timeout floor to the connection paths that are known
+/// Applies a small, configurable timeout floor to connection paths that are known
 /// to disconnect otherwise healthy peers while large mod payloads are queued.
 /// Target discovery is deliberately narrow so startup profiling does not add a
 /// second expensive compatibility-analysis phase.
@@ -23,12 +21,9 @@ internal static class ConnectionStability
 {
     private const string JotunnGuid = "com.jotunn.jotunn";
     private const string AzuAntiCheatGuid = "Azumatt.AzuAntiCheat";
-    private const string LegacyTimeoutLimitGuid = "com.maxsch.valheim.TimeoutLimit";
     private const string ServerSyncTypeName = "ServerSync.ConfigSync";
     private const string OriginalServerSyncTimeoutMessage =
         "Disconnecting {0} after 30 seconds config sending timeout";
-    private const string FixedServerSyncTimeoutMessage =
-        "Disconnecting {0} after 90 seconds config sending timeout";
 
     private static readonly object Lock = new();
     private static readonly Harmony Harmony =
@@ -36,30 +31,23 @@ internal static class ConnectionStability
     private static readonly HashSet<Assembly> InspectedAssemblies = new();
     private static readonly HashSet<MethodBase> RegisteredWaitTargets = new();
     private static readonly HashSet<MethodBase> CompatibleWaitTargets = new();
-    private static readonly HashSet<MethodBase> RaisedWaitTargets = new();
     private static readonly HashSet<string> WarningSet = new(StringComparer.Ordinal);
-    private static readonly List<string> Warnings = new();
     private static readonly MethodInfo? TimeGetter =
         AccessTools.PropertyGetter(typeof(UnityEngine.Time), nameof(UnityEngine.Time.time));
     private static readonly MethodInfo? WaitTranspilerMethod =
         AccessTools.DeclaredMethod(typeof(ConnectionStability), nameof(WaitForQueueTranspiler));
 
     private static bool _vanillaInstallAttempted;
-    private static bool _vanillaPatchInstalled;
     private static FieldInfo? _zRpcTimeoutField;
     private static bool _loadedIntegrationsInstalled;
-    private static bool _legacyTimeoutLimitDetected;
-    private static bool _jotunnDetected;
-    private static bool _jotunnTimeoutApplied;
-    private static int _serverSyncAssembliesFound;
-    private static int _serverSyncTargetsRegistered;
-    private static int _serverSyncTargetsCompatible;
-    private static int _azuTargetsRegistered;
-    private static int _azuTargetsCompatible;
-    private static double _installationMilliseconds;
 
     internal static void InstallBeforeChainloader()
     {
+        if (!LoadTimeProfilerPatcher.TimeoutProtectionEnabled)
+        {
+            return;
+        }
+
         lock (Lock)
         {
             if (_vanillaInstallAttempted)
@@ -93,7 +81,6 @@ internal static class ConnectionStability
                     target,
                     postfix: new HarmonyMethod(postfix) { priority = Priority.Last });
                 _zRpcTimeoutField = timeoutField;
-                _vanillaPatchInstalled = true;
             }
             catch (Exception ex)
             {
@@ -105,6 +92,11 @@ internal static class ConnectionStability
 
     internal static void InstallLoadedModIntegrations()
     {
+        if (!LoadTimeProfilerPatcher.TimeoutProtectionEnabled)
+        {
+            return;
+        }
+
         lock (Lock)
         {
             if (_loadedIntegrationsInstalled)
@@ -113,22 +105,9 @@ internal static class ConnectionStability
             }
 
             _loadedIntegrationsInstalled = true;
-            Stopwatch stopwatch = Stopwatch.StartNew();
             try
             {
                 PluginInfo[] plugins = GetLoadedPlugins();
-                _legacyTimeoutLimitDetected = plugins.Any(plugin =>
-                    string.Equals(
-                        plugin.Metadata?.GUID,
-                        LegacyTimeoutLimitGuid,
-                        StringComparison.Ordinal));
-                if (_legacyTimeoutLimitDetected)
-                {
-                    RecordWarning(
-                        "Legacy TimeoutLimit is loaded; Jotunn and mod queue timeout ownership was left to it.");
-                    return;
-                }
-
                 InstallJotunnTimeout(plugins);
                 foreach (PluginInfo plugin in plugins)
                 {
@@ -160,76 +139,6 @@ internal static class ConnectionStability
                 RecordWarning(
                     "Minimal mod timeout integration failed open: " + OneLine(ex));
             }
-            finally
-            {
-                stopwatch.Stop();
-                _installationMilliseconds = stopwatch.Elapsed.TotalMilliseconds;
-                ProfilerLog.WriteLine(
-                    "Minimal connection stability installed in " +
-                    stopwatch.Elapsed.TotalMilliseconds.ToString(
-                        "0.###",
-                        CultureInfo.InvariantCulture) +
-                    " ms: ServerSync " +
-                    _serverSyncTargetsCompatible.ToString(CultureInfo.InvariantCulture) +
-                    "/" +
-                    _serverSyncTargetsRegistered.ToString(CultureInfo.InvariantCulture) +
-                    ", AzuAntiCheat " +
-                    _azuTargetsCompatible.ToString(CultureInfo.InvariantCulture) +
-                    "/" +
-                    _azuTargetsRegistered.ToString(CultureInfo.InvariantCulture) +
-                    " compatible queue target(s).");
-            }
-        }
-    }
-
-    internal static void AppendReport(StringBuilder builder, ProfileSession session)
-    {
-        lock (Lock)
-        {
-            builder.AppendLine("Connection stability:");
-            builder.AppendLine(
-                "  Mode: minimal; fixed timeout floor=90 s; original longer limits are preserved");
-            builder.Append("  Integration installation: ")
-                .AppendLine(TimelineProfiler.FormatDuration(_installationMilliseconds));
-            builder.Append("  Vanilla ZRpc.SetLongTimeout: ")
-                .AppendLine(_vanillaPatchInstalled
-                    ? "postfix installed"
-                    : _vanillaInstallAttempted
-                        ? "not patched (original behavior retained)"
-                        : "not attempted");
-            builder.Append("  Jotunn CustomRPC.Timeout: ")
-                .AppendLine(_legacyTimeoutLimitDetected
-                    ? "left to legacy TimeoutLimit"
-                    : !_jotunnDetected
-                        ? "not present"
-                        : _jotunnTimeoutApplied
-                            ? "90-second floor applied"
-                            : "already 90 seconds or longer");
-            builder.Append("  ServerSync queue waits: ")
-                .Append(_serverSyncTargetsCompatible)
-                .Append('/')
-                .Append(_serverSyncTargetsRegistered)
-                .Append(" compatible target(s) in ")
-                .Append(_serverSyncAssembliesFound)
-                .AppendLine(" detected assembly/assemblies");
-            builder.Append("  AzuAntiCheat queue waits: ")
-                .Append(_azuTargetsCompatible)
-                .Append('/')
-                .Append(_azuTargetsRegistered)
-                .AppendLine(" compatible target(s)");
-            builder.Append("  Queue limits raised to 90 seconds: ")
-                .AppendLine(RaisedWaitTargets.Count.ToString(CultureInfo.InvariantCulture));
-            builder.AppendLine(
-                "  Fragment cache lifetime: unchanged (original mod behavior retained)");
-
-            if (Warnings.Count > 0)
-            {
-                builder.AppendLine("  Compatibility notes:");
-                foreach (string warning in Warnings)
-                {
-                    builder.Append("    - ").AppendLine(warning);
-                }
-            }
         }
     }
 
@@ -257,7 +166,6 @@ internal static class ConnectionStability
             return;
         }
 
-        _jotunnDetected = true;
         try
         {
             Type? customRpc = plugin.Instance.GetType().Assembly.GetType(
@@ -288,7 +196,6 @@ internal static class ConnectionStability
                 current < LoadTimeProfilerPatcher.ConnectionTimeoutSeconds)
             {
                 timeout.SetValue(null, LoadTimeProfilerPatcher.ConnectionTimeoutSeconds);
-                _jotunnTimeoutApplied = true;
             }
         }
         catch (Exception ex)
@@ -315,17 +222,11 @@ internal static class ConnectionStability
                 ignoreCase: false);
             if (configSync != null)
             {
-                _serverSyncAssembliesFound++;
                 foreach (MethodInfo target in FindWaitTargets(configSync))
                 {
-                    _serverSyncTargetsRegistered++;
-                    bool compatible = PatchWaitTarget(
+                    PatchWaitTarget(
                         target,
                         "ServerSync in " + sourceName);
-                    if (compatible)
-                    {
-                        _serverSyncTargetsCompatible++;
-                    }
                 }
             }
 
@@ -333,14 +234,9 @@ internal static class ConnectionStability
             {
                 foreach (MethodInfo target in FindAzuWaitTargets(assembly))
                 {
-                    _azuTargetsRegistered++;
-                    bool compatible = PatchWaitTarget(
+                    PatchWaitTarget(
                         target,
                         "AzuAntiCheat in " + sourceName);
-                    if (compatible)
-                    {
-                        _azuTargetsCompatible++;
-                    }
                 }
             }
         }
@@ -433,7 +329,6 @@ internal static class ConnectionStability
         try
         {
             CompatibleWaitTargets.Remove(target);
-            RaisedWaitTargets.Remove(target);
             Harmony.Patch(
                 target,
                 transpiler: new HarmonyMethod(WaitTranspilerMethod)
@@ -468,6 +363,11 @@ internal static class ConnectionStability
         List<CodeInstruction> result = instructions.ToList();
         try
         {
+            if (!LoadTimeProfilerPatcher.TimeoutProtectionEnabled)
+            {
+                return result;
+            }
+
             List<int> deadlineLiterals = new();
             for (int i = 0; i + 2 < result.Count; i++)
             {
@@ -498,10 +398,6 @@ internal static class ConnectionStability
             if (originalTimeout < LoadTimeProfilerPatcher.ConnectionTimeoutSeconds)
             {
                 literal.operand = LoadTimeProfilerPatcher.ConnectionTimeoutSeconds;
-                lock (Lock)
-                {
-                    RaisedWaitTargets.Add(__originalMethod);
-                }
             }
 
             if (originalTimeout <=
@@ -517,7 +413,9 @@ internal static class ConnectionStability
                             StringComparison.Ordinal))
                     {
                         instruction.operand =
-                            FixedServerSyncTimeoutMessage;
+                            "Disconnecting {0} after " +
+                            FormatConfiguredTimeout() +
+                            " seconds config sending timeout";
                     }
                 }
             }
@@ -539,6 +437,11 @@ internal static class ConnectionStability
 
     private static void ZRpcSetLongTimeoutPostfix()
     {
+        if (!LoadTimeProfilerPatcher.TimeoutProtectionEnabled)
+        {
+            return;
+        }
+
         try
         {
             FieldInfo? timeoutField = _zRpcTimeoutField;
@@ -559,6 +462,13 @@ internal static class ConnectionStability
         {
             RecordWarning("ZRpc timeout override failed open: " + OneLine(ex));
         }
+    }
+
+    private static string FormatConfiguredTimeout()
+    {
+        return LoadTimeProfilerPatcher.ConnectionTimeoutSeconds.ToString(
+            "0.###",
+            CultureInfo.InvariantCulture);
     }
 
     private static IEnumerable<Type> EnumerateTypeAndNested(Type root)
@@ -624,11 +534,6 @@ internal static class ConnectionStability
             if (!WarningSet.Add(warning))
             {
                 return;
-            }
-
-            if (Warnings.Count < 12)
-            {
-                Warnings.Add(warning);
             }
 
             LoadTimeProfilerPatcher.LogWarning(warning);
