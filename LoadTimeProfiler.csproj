@@ -108,7 +108,7 @@
   <Target Name="CopyOutputDLL" AfterTargets="Build" Condition="'$(CopyOutputDLLPath)' != '' AND Exists('$(CopyOutputDLLPath)')">
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(CopyOutputDLLPath)" OverwriteReadOnlyFiles="true" />
   </Target>
-  <Target Name="PackageRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' AND '$(OS)' == 'Windows_NT'">
+  <Target Name="PackageRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' AND '$(OS)' == 'Windows_NT' AND '$(SkipReleasePackage)' != 'true'">
     <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(ProjectDir)BuildReleasePackage.ps1&quot; -ProjectDir &quot;$(ProjectDir).&quot; -TargetPath &quot;$(TargetPath)&quot; -PackageName &quot;LoadTimeProfiler&quot;" />
   </Target>
 </Project>

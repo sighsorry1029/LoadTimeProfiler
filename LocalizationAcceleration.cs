@@ -155,7 +155,7 @@ internal static class LocalizationAcceleration
                     }
                 }
 
-                if (state.CacheEntry == null)
+                if (state.Cacheable && state.CacheEntry == null)
                 {
                     state.Before = new Dictionary<string, string>(translations, StringComparer.Ordinal);
                     state.Writes = new List<WriteOperation>();

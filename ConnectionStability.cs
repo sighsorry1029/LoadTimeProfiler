@@ -309,13 +309,13 @@ internal static class ConnectionStability
         }
     }
 
-    private static bool PatchWaitTarget(
+    private static void PatchWaitTarget(
         MethodInfo target,
         string integrationName)
     {
         if (!RegisteredWaitTargets.Add(target))
         {
-            return CompatibleWaitTargets.Contains(target);
+            return;
         }
 
         if (WaitTranspilerMethod == null || TimeGetter == null)
@@ -323,7 +323,7 @@ internal static class ConnectionStability
             RecordWarning(
                 integrationName +
                 " queue timeout was skipped because the minimal transpiler prerequisites were unavailable.");
-            return false;
+            return;
         }
 
         try
@@ -342,17 +342,13 @@ internal static class ConnectionStability
                     integrationName +
                     " queue timeout retained its original body because no unique Time.time deadline was found in " +
                     Describe(target) + ".");
-                return false;
             }
-
-            return true;
         }
         catch (Exception ex)
         {
             RecordWarning(
                 integrationName + " queue timeout patch failed open for " +
                 Describe(target) + ": " + OneLine(ex));
-            return false;
         }
     }
 

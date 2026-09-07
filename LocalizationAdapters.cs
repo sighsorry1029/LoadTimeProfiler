@@ -385,7 +385,7 @@ internal sealed class ParsedMapLocalizationAdapter :
 internal sealed class LocalizationProducerCallState
 {
     internal LocalizationProducerCallState(
-        CapturedLocalizationAdapter adapter,
+        LocalizeKeyLocalizationAdapter adapter,
         Localization instance,
         string language,
         long generation)
@@ -406,7 +406,7 @@ internal sealed class LocalizationProducerCallState
         BeforeDictionary = beforeDictionary;
     }
 
-    internal CapturedLocalizationAdapter Adapter { get; }
+    internal LocalizeKeyLocalizationAdapter Adapter { get; }
     internal Localization Instance { get; }
     internal string Language { get; }
     internal long Generation { get; }
@@ -416,20 +416,39 @@ internal sealed class LocalizationProducerCallState
     internal bool Completed { get; set; }
 }
 
-internal abstract class CapturedLocalizationAdapter :
+internal sealed class LocalizeKeyLocalizationAdapter :
     LocalizationAdapterBase
 {
+    internal static IReadOnlyList<string> SupportedTypeNames { get; } =
+        Array.AsReadOnly(new[]
+        {
+            "ItemManager.LocalizeKey",
+            "PieceManager.LocalizeKey",
+            "CreatureManager.LocalizeKey",
+            "StatusEffectManager.LocalizeKey",
+            "SkillManager.Skill+LocalizeKey"
+        });
+
     private readonly object _lock = new();
     private readonly Dictionary<string, CapturedEntry> _entries =
         new(StringComparer.Ordinal);
     private long _generation;
+    private readonly object _aliasLock = new();
+    private readonly FieldInfo _keysField;
+    private readonly FieldInfo _localizationsField;
+    private bool _aliasStateKnown;
+    private bool _containsAlias;
 
-    protected CapturedLocalizationAdapter(
+    private LocalizeKeyLocalizationAdapter(
         MethodInfo target,
-        MethodBase[] mutationMethods)
+        MethodBase[] mutationMethods,
+        FieldInfo keysField,
+        FieldInfo localizationsField)
         : base(target)
     {
         MutationMethods = mutationMethods;
+        _keysField = keysField;
+        _localizationsField = localizationsField;
     }
 
     internal MethodBase[] MutationMethods { get; }
@@ -560,15 +579,6 @@ internal abstract class CapturedLocalizationAdapter :
         }
     }
 
-    protected virtual bool CanCacheCurrentGeneration()
-    {
-        return true;
-    }
-
-    protected virtual void OnInvalidated()
-    {
-    }
-
     private sealed class CapturedEntry
     {
         internal CapturedEntry(
@@ -581,29 +591,6 @@ internal abstract class CapturedLocalizationAdapter :
 
         internal long Generation { get; }
         internal LocalizationAcceleration.WriteOperation[] Writes { get; }
-    }
-}
-
-internal sealed class LocalizeKeyLocalizationAdapter :
-    CapturedLocalizationAdapter
-{
-    private readonly object _aliasLock = new();
-    private readonly FieldInfo _keysField;
-    private readonly FieldInfo _localizationsField;
-    private bool _aliasStateKnown;
-    private bool _containsAlias;
-
-    private LocalizeKeyLocalizationAdapter(
-        MethodInfo target,
-        MethodBase[] mutationMethods,
-        FieldInfo keysField,
-        FieldInfo localizationsField)
-        : base(
-            target,
-            mutationMethods)
-    {
-        _keysField = keysField;
-        _localizationsField = localizationsField;
     }
 
     internal static bool TryCreate(
@@ -703,7 +690,7 @@ internal sealed class LocalizeKeyLocalizationAdapter :
         return true;
     }
 
-    protected override bool CanCacheCurrentGeneration()
+    private bool CanCacheCurrentGeneration()
     {
         lock (_aliasLock)
         {
@@ -728,7 +715,7 @@ internal sealed class LocalizeKeyLocalizationAdapter :
         }
     }
 
-    protected override void OnInvalidated()
+    private void OnInvalidated()
     {
         lock (_aliasLock)
         {
@@ -762,26 +749,7 @@ internal sealed class LocalizeKeyLocalizationAdapter :
     private static bool IsKnownManagerLocalizeKey(Type type)
     {
         string fullName = type.FullName ?? string.Empty;
-        return string.Equals(
-                   fullName,
-                   "ItemManager.LocalizeKey",
-                   StringComparison.Ordinal) ||
-               string.Equals(
-                   fullName,
-                   "PieceManager.LocalizeKey",
-                   StringComparison.Ordinal) ||
-               string.Equals(
-                   fullName,
-                   "CreatureManager.LocalizeKey",
-                   StringComparison.Ordinal) ||
-               string.Equals(
-                   fullName,
-                   "StatusEffectManager.LocalizeKey",
-                   StringComparison.Ordinal) ||
-               string.Equals(
-                   fullName,
-                   "SkillManager.Skill+LocalizeKey",
-                   StringComparison.Ordinal);
+        return SupportedTypeNames.Contains(fullName, StringComparer.Ordinal);
     }
 }
 

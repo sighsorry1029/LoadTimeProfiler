@@ -23,9 +23,9 @@ internal static class LocalizationAdapterRegistry
         ParsedCandidates = new();
     private static readonly Dictionary<MethodBase, ParsedMapLocalizationAdapter>
         ParsedAdapters = new();
-    private static readonly Dictionary<MethodBase, CapturedLocalizationAdapter>
+    private static readonly Dictionary<MethodBase, LocalizeKeyLocalizationAdapter>
         CapturedAdapters = new();
-    private static readonly Dictionary<MethodBase, CapturedLocalizationAdapter>
+    private static readonly Dictionary<MethodBase, LocalizeKeyLocalizationAdapter>
         MutationAdapters = new();
 
     private static readonly MethodInfo? LoadCsvMethod = AccessTools.DeclaredMethod(
@@ -41,14 +41,6 @@ internal static class LocalizationAdapterRegistry
     {
         "LocalizationManager.Localizer",
         "Marketplace.Localizer"
-    };
-    private static readonly string[] LocalizeKeyTypeNames =
-    {
-        "ItemManager.LocalizeKey",
-        "PieceManager.LocalizeKey",
-        "CreatureManager.LocalizeKey",
-        "StatusEffectManager.LocalizeKey",
-        "SkillManager.Skill+LocalizeKey"
     };
 
     [ThreadStatic]
@@ -177,7 +169,7 @@ internal static class LocalizationAdapterRegistry
         }
 
         ParsedMapLocalizationAdapter[] parsed;
-        CapturedLocalizationAdapter[] captured;
+        LocalizeKeyLocalizationAdapter[] captured;
         lock (Lock)
         {
             parsed = ParsedAdapters.Values.ToArray();
@@ -198,7 +190,7 @@ internal static class LocalizationAdapterRegistry
             }
         }
 
-        foreach (CapturedLocalizationAdapter adapter in captured)
+        foreach (LocalizeKeyLocalizationAdapter adapter in captured)
         {
             try
             {
@@ -288,7 +280,7 @@ internal static class LocalizationAdapterRegistry
             return true;
         }
 
-        CapturedLocalizationAdapter? adapter;
+        LocalizeKeyLocalizationAdapter? adapter;
         lock (Lock)
         {
             CapturedAdapters.TryGetValue(originalMethod, out adapter);
@@ -389,7 +381,7 @@ internal static class LocalizationAdapterRegistry
             return;
         }
 
-        CapturedLocalizationAdapter? adapter;
+        LocalizeKeyLocalizationAdapter? adapter;
         lock (Lock)
         {
             MutationAdapters.TryGetValue(originalMethod, out adapter);
@@ -549,7 +541,7 @@ internal static class LocalizationAdapterRegistry
             }
         }
 
-        foreach (string typeName in LocalizeKeyTypeNames)
+        foreach (string typeName in LocalizeKeyLocalizationAdapter.SupportedTypeNames)
         {
             try
             {
@@ -816,7 +808,7 @@ internal static class LocalizationAdapterRegistry
     }
 
     private static void InstallCapturedAdapter(
-        CapturedLocalizationAdapter adapter)
+        LocalizeKeyLocalizationAdapter adapter)
     {
         MethodBase target = adapter.Target;
         if (HasForeignPatches(target))

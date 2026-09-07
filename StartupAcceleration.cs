@@ -237,7 +237,7 @@ internal static class StartupAcceleration
                 return true;
             }
 
-            tracked.SkippedWrites++;
+            tracked.HasPendingWrites = true;
             tracked.Generation++;
             state = new ConfigSaveState(tracked.Generation);
             return false;
@@ -262,7 +262,7 @@ internal static class StartupAcceleration
             {
                 // A successful explicit save already persisted every pending
                 // Bind/setting update for this file.
-                tracked.SkippedWrites = 0;
+                tracked.HasPendingWrites = false;
             }
         }
     }
@@ -363,7 +363,7 @@ internal static class StartupAcceleration
         {
             ConfigFile config = pair.Key;
             TrackedConfig tracked = pair.Value;
-            if (tracked.SkippedWrites <= 0)
+            if (!tracked.HasPendingWrites)
             {
                 continue;
             }
@@ -469,7 +469,7 @@ internal static class StartupAcceleration
 
     private sealed class TrackedConfig
     {
-        internal int SkippedWrites { get; set; }
+        internal bool HasPendingWrites { get; set; }
         internal long Generation { get; set; }
     }
 

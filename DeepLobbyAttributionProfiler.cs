@@ -19,7 +19,6 @@ internal static class DeepLobbyAttributionProfiler
     private static readonly object Lock = new();
     private static readonly Harmony InstrumentationHarmony = new(LoadTimeProfilerPatcher.ModGUID + ".deep-lobby-attribution");
     private static readonly Dictionary<MethodBase, string> TargetLabels = BuildTargetLabels();
-    private static readonly HashSet<MethodBase> InstrumentedMethods = new();
     private static readonly Dictionary<MethodBase, PluginIdentity> CallbackOwners = new();
     private static readonly Dictionary<string, PluginAggregate> PluginTimings = new(StringComparer.Ordinal);
 
@@ -97,13 +96,12 @@ internal static class DeepLobbyAttributionProfiler
                 PluginIdentity identity = resolver.Resolve(patchMethod, patch.owner);
                 lock (Lock)
                 {
-                    if (InstrumentedMethods.Contains(patchMethod))
+                    if (CallbackOwners.ContainsKey(patchMethod))
                     {
                         alreadyInstrumented++;
                         continue;
                     }
 
-                    InstrumentedMethods.Add(patchMethod);
                     CallbackOwners[patchMethod] = identity;
                 }
 
@@ -126,7 +124,6 @@ internal static class DeepLobbyAttributionProfiler
                     failed++;
                     lock (Lock)
                     {
-                        InstrumentedMethods.Remove(patchMethod);
                         CallbackOwners.Remove(patchMethod);
                     }
 
@@ -159,11 +156,18 @@ internal static class DeepLobbyAttributionProfiler
             return;
         }
 
-        (_activePhases ??= new Stack<PhaseState>()).Push(new PhaseState(target, label));
+        (_activePhases ??= new Stack<PhaseState>()).Push(
+            new PhaseState(target, label, _activeCallbacks?.Count ?? 0));
     }
 
     internal static void EndTarget(MethodBase target)
     {
+        // Lifecycle finalizers also run for targets that never opened a deep scope.
+        if (!TargetLabels.ContainsKey(target))
+        {
+            return;
+        }
+
         if (_activePhases == null || _activePhases.Count == 0)
         {
             return;
@@ -178,7 +182,11 @@ internal static class DeepLobbyAttributionProfiler
         }
 
         _activePhases.Pop();
-        _activeCallbacks?.Clear();
+        // A nested phase must leave its caller's callbacks available for child-time accounting.
+        while (_activeCallbacks != null && _activeCallbacks.Count > state.CallbackDepth)
+        {
+            _activeCallbacks.Pop();
+        }
     }
 
     internal static void AppendReport(StringBuilder builder)
@@ -546,14 +554,16 @@ internal static class DeepLobbyAttributionProfiler
 
     private sealed class PhaseState
     {
-        internal PhaseState(MethodBase target, string label)
+        internal PhaseState(MethodBase target, string label, int callbackDepth)
         {
             Target = target;
             Label = label;
+            CallbackDepth = callbackDepth;
         }
 
         internal MethodBase Target { get; }
         internal string Label { get; }
+        internal int CallbackDepth { get; }
     }
 
     private sealed class PluginAggregate

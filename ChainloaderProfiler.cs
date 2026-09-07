@@ -18,7 +18,6 @@ internal static class ChainloaderProfiler
     private static readonly Dictionary<string, MutableTiming> Initializations = new(StringComparer.Ordinal);
     private static readonly Dictionary<string, MutableTiming> Starts = new(StringComparer.Ordinal);
     private static readonly Dictionary<MethodBase, PluginIdentity> StartMethods = new();
-    private static readonly HashSet<MethodBase> InstrumentedStartMethods = new();
     private static bool _chainloaderActive;
     private static long _chainloaderStarted;
     private static double _preChainloaderMilliseconds;
@@ -172,7 +171,7 @@ internal static class ChainloaderProfiler
 
         lock (Lock)
         {
-            if (!InstrumentedStartMethods.Add(start))
+            if (StartMethods.ContainsKey(start))
             {
                 return;
             }
@@ -196,7 +195,6 @@ internal static class ChainloaderProfiler
         {
             lock (Lock)
             {
-                InstrumentedStartMethods.Remove(start);
                 StartMethods.Remove(start);
             }
 

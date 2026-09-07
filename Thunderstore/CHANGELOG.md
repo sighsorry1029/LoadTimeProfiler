@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.2.5
+
+- Fixed scoped Harmony callback attribution when lifecycle calls are nested inside `ObjectDB.Awake` or `ZNetScene.Awake`, preserving outer callbacks and exclusive timing through nested and recursive phases.
+- Avoids unnecessary translation dictionary snapshots when foreign patches force localization CSV caching to bypass.
+- Simplified instrumentation bookkeeping, pending config-write tracking, and LocalizeKey adapter internals while preserving configuration keys, Harmony callback signatures, and compatibility policies.
+- Added 12 isolated regression cases covering config saves, nested attribution, and LocalizeKey identity, replay, and invalidation behavior.
+- Added the `SkipReleasePackage` build option so Release builds can be validated without regenerating the Thunderstore package; default packaging behavior is unchanged.
+
 ## 1.2.4
 
 - Increased automatic profile-log retention from 10 to 20 reports.
