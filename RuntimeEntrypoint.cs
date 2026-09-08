@@ -12,7 +12,8 @@ public static class RuntimeEntrypoint
         try
         {
             LoadTimeProfilerPatcher.InitializeProfiler();
-            if (!LoadTimeProfilerPatcher.AnyRuntimeFeatureEnabled)
+            LogFiltering.InstallPluginOwnership();
+            if (!LoadTimeProfilerPatcher.AnyStartupFeatureEnabled)
             {
                 return;
             }
@@ -71,8 +72,10 @@ public static class RuntimeEntrypoint
 
     public static void AfterChainloaderStart()
     {
-        if (!LoadTimeProfilerPatcher.AnyRuntimeFeatureEnabled)
+        if (!LoadTimeProfilerPatcher.AnyStartupFeatureEnabled)
         {
+            ConfigAutoReload.Start();
+            ConfigManagerIntegration.TryRegister();
             return;
         }
 
@@ -146,6 +149,10 @@ public static class RuntimeEntrypoint
                 ProfilerLog.WriteLine("Dedicated server attribution preparation failed: " + ex);
             }
         }
+
+        // Begin watching after the startup config-save scope has been flushed.
+        ConfigAutoReload.Start();
+        ConfigManagerIntegration.TryRegister();
     }
 
     internal static void HandleChainloaderFailure(Exception exception)

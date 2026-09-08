@@ -15,10 +15,11 @@ $version = [System.Reflection.AssemblyName]::GetAssemblyName($TargetPath).Versio
 $thunderstoreDir = Join-Path $ProjectDir "Thunderstore"
 $manifestPath = Join-Path $thunderstoreDir "manifest.json"
 $readmePath = Join-Path $ProjectDir "README.md"
+$validationPath = Join-Path $ProjectDir "VALIDATION.md"
 $changelogPath = Join-Path $thunderstoreDir "CHANGELOG.md"
 $iconPath = Join-Path $thunderstoreDir "icon.png"
 
-foreach ($requiredPath in @($manifestPath, $readmePath, $changelogPath, $iconPath)) {
+foreach ($requiredPath in @($manifestPath, $readmePath, $validationPath, $changelogPath, $iconPath)) {
     if (-not (Test-Path -LiteralPath $requiredPath -PathType Leaf)) {
         throw "Required package file was not found: $requiredPath"
     }
@@ -40,6 +41,7 @@ try {
 
     Copy-Item -LiteralPath $TargetPath -Destination (Join-Path $patchersDir ([System.IO.Path]::GetFileName($TargetPath))) -Force
     Copy-Item -LiteralPath $readmePath -Destination (Join-Path $stagingDir "README.md") -Force
+    Copy-Item -LiteralPath $validationPath -Destination (Join-Path $stagingDir "VALIDATION.md") -Force
     Copy-Item -LiteralPath $changelogPath -Destination (Join-Path $stagingDir "CHANGELOG.md") -Force
     Copy-Item -LiteralPath $iconPath -Destination (Join-Path $stagingDir "icon.png") -Force
     [System.IO.File]::WriteAllText(
@@ -52,5 +54,11 @@ try {
     Write-Host "Created Thunderstore package: $zipPath"
 }
 finally {
-    Remove-Item -LiteralPath $stagingDir -Recurse -Force -ErrorAction SilentlyContinue
+    $resolvedStaging = [System.IO.Path]::GetFullPath($stagingDir)
+    $resolvedTemp = [System.IO.Path]::GetFullPath([System.IO.Path]::GetTempPath()).TrimEnd('\', '/')
+    if ([System.IO.Path]::GetDirectoryName($resolvedStaging) -ne $resolvedTemp -or
+        [System.IO.Path]::GetFileName($resolvedStaging) -notlike "$PackageName-Thunderstore-*") {
+        throw "Refusing to remove unexpected staging path: $resolvedStaging"
+    }
+    Remove-Item -LiteralPath $resolvedStaging -Recurse -Force -ErrorAction SilentlyContinue
 }

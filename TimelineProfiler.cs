@@ -27,6 +27,8 @@ internal static class TimelineProfiler
     private static readonly SessionState Startup = new(ProfileSession.Startup, "Start To Lobby");
     private static readonly SessionState Connection = new(ProfileSession.Connection, "Lobby To World");
     private static double _patcherStartMilliseconds;
+    private static ModSettings? _patcherStartSettings;
+    private static string? _patcherStartHooks;
 
     internal static void CapturePatcherStart()
     {
@@ -35,6 +37,8 @@ internal static class TimelineProfiler
             if (_patcherStartMilliseconds <= 0d)
             {
                 _patcherStartMilliseconds = NowMilliseconds();
+                _patcherStartSettings = LoadTimeProfilerPatcher.Configuration?.Snapshot;
+                _patcherStartHooks = LogFiltering.DescribeHooks();
             }
         }
     }
@@ -57,8 +61,9 @@ internal static class TimelineProfiler
         {
             double now = NowMilliseconds();
             double started = _patcherStartMilliseconds > 0d ? _patcherStartMilliseconds : now;
-            Startup.Begin(started, dedicatedServer ? "Server Startup" : "Start To Lobby");
-            Startup.AddMilestone("LoadTimeProfiler.Patcher.Finish", started);
+            Startup.Begin(started, dedicatedServer ? "Server Startup" : "Start To Lobby",
+                _patcherStartSettings, _patcherStartHooks);
+            Startup.AddMilestone("LoadTimeProfiler.Patcher.Patch", started);
             Startup.AddMilestone("LoadTimeProfiler.Patcher initialized", now);
         }
     }
@@ -362,6 +367,14 @@ internal static class TimelineProfiler
         builder.AppendLine($"=== {snapshot.Name} ===");
         builder.AppendLine($"Result: {snapshot.Result}");
         builder.Append("Total: ").AppendLine(FormatDuration(snapshot.TotalMilliseconds));
+        builder.Append("Logging at start: ").AppendLine(snapshot.StartSettings?.Logging.Description ?? "unavailable");
+        builder.Append("Logging at end: ").AppendLine(snapshot.EndSettings?.Logging.Description ?? "unavailable");
+        builder.Append("Logging hooks at start: ").AppendLine(snapshot.StartHooks);
+        builder.Append("Logging hooks at end: ").AppendLine(snapshot.EndHooks);
+        builder.Append("Config revision: ").Append(snapshot.StartSettings?.Revision ?? 0)
+            .Append(" -> ").Append(snapshot.EndSettings?.Revision ?? 0).AppendLine();
+        if (snapshot.StartSettings?.Revision != snapshot.EndSettings?.Revision)
+            builder.AppendLine("Configuration changed during this measurement; startup settings remained fixed. Compare runs with matching logging policies.");
         if (snapshot.Session == ProfileSession.Connection)
         {
             AppendConnectionOutcome(builder, snapshot);
@@ -527,6 +540,8 @@ internal static class TimelineProfiler
         private string? _failureReason;
         private double? _logoutCandidateMilliseconds;
         private string? _logoutCandidateObservation;
+        private ModSettings? _startSettings;
+        private string _startHooks = string.Empty;
 
         internal SessionState(ProfileSession session, string name)
         {
@@ -541,7 +556,8 @@ internal static class TimelineProfiler
         internal int Generation { get; private set; }
         private double StartMilliseconds { get; set; }
 
-        internal void Begin(double startMilliseconds, string? name = null)
+        internal void Begin(double startMilliseconds, string? name = null,
+            ModSettings? startSettings = null, string? startHooks = null)
         {
             if (!string.IsNullOrEmpty(name))
             {
@@ -557,6 +573,8 @@ internal static class TimelineProfiler
             _failureReason = null;
             _logoutCandidateMilliseconds = null;
             _logoutCandidateObservation = null;
+            _startSettings = startSettings ?? LoadTimeProfilerPatcher.Configuration?.Snapshot;
+            _startHooks = startHooks ?? LogFiltering.DescribeHooks();
         }
 
         internal void AddMilestoneOnce(string label, double absoluteMilliseconds)
@@ -639,7 +657,11 @@ internal static class TimelineProfiler
                 Generation,
                 _milestones.ToArray(),
                 _failureDecisionMilliseconds,
-                _failureReason);
+                _failureReason,
+                _startSettings,
+                LoadTimeProfilerPatcher.Configuration?.Snapshot,
+                _startHooks,
+                LogFiltering.DescribeHooks());
         }
     }
 
@@ -653,7 +675,11 @@ internal static class TimelineProfiler
             int generation,
             Milestone[] milestones,
             double? failureDecisionMilliseconds,
-            string? failureReason)
+            string? failureReason,
+            ModSettings? startSettings,
+            ModSettings? endSettings,
+            string startHooks,
+            string endHooks)
         {
             Session = session;
             Name = name;
@@ -663,6 +689,10 @@ internal static class TimelineProfiler
             Milestones = milestones;
             FailureDecisionMilliseconds = failureDecisionMilliseconds;
             FailureReason = failureReason;
+            StartSettings = startSettings;
+            EndSettings = endSettings;
+            StartHooks = startHooks;
+            EndHooks = endHooks;
         }
 
         internal ProfileSession Session { get; }
@@ -673,6 +703,10 @@ internal static class TimelineProfiler
         internal Milestone[] Milestones { get; }
         internal double? FailureDecisionMilliseconds { get; }
         internal string? FailureReason { get; }
+        internal ModSettings? StartSettings { get; }
+        internal ModSettings? EndSettings { get; }
+        internal string StartHooks { get; }
+        internal string EndHooks { get; }
     }
 
     private readonly struct Milestone

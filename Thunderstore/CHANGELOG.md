@@ -1,5 +1,23 @@
 # Changelog
 
+## 1.3.1
+
+- Added optional normal-list integration with compatible sighsorry.ConfigManager builds, including four independent log checkboxes per loaded mod, validated edits to the same cfg, and restart-required startup options. The updated ConfigManager edits numeric values inline and caches static checkbox metadata and labels.
+- Integrated mod logging filters into the single LoadTimeProfiler patcher DLL, with no per-message stack inspection. Groups are Fatal + Error, Warning, Message + Info, and Debug; defaults select the first two. No logging master switch or redundant None/All checkbox is shown.
+- Identifies default plugin loggers by object and mod GUID before constructor-body/Awake logging, so same-name mods have independent settings. Unowned/custom/shared Manual loggers and all Unity output always pass. Removed the common logging options, all Unity filter patches and their bootstrap hook.
+- Replaced separate configuration implementations with one `sighsorry.LoadTimeProfiler.cfg`: logging settings reload on headless servers; profiling, startup acceleration, and timeout settings remain fixed until restart. The filename uses the mod GUID.
+- Groups general settings under `General` in both the cfg and ConfigManager, with `ProfilingEnabled` explicitly controlling measurement and reports and separate per-mod logging controls.
+- Added `General.ConfigAutoReloadEnabled`, default false and restart-required. When enabled, other mods' registered BepInEx cfg files reload on the main thread after local edits without an in-game administrator or ConfigManager. The target mod retains responsibility for live behavior and client synchronization.
+- Shares filesystem watchers by directory, coalesces stable file changes, preserves automatic-save flags, isolates reload errors and tracks each live config object's applied contents to avoid duplicate callbacks. A standalone ConfigWatcher disables only this overlapping feature. LTP's own logging reload remains independent.
+- Applies configuration entries independently: unknown sections/keys are ignored and preserved, missing General values keep current/default values, and invalid values retain only the affected entry's current/default value. Duplicate keys use the last valid assignment; removing a mod GUID rule restores its default groups.
+- Allows ConfigManager edits despite unrelated invalid values or unknown sections, including files without General. Edits repair the selected value or add its current key without converting old names or rewriting unrelated lines. Preserves atomic snapshots, disk conflict checks, read-failure retention and restart-needed notices.
+- Preserves profiler reports and its own diagnostic source; records logging policies, installed hooks, and configuration revisions at each measurement boundary.
+- Disables only integrated filtering when standalone QuietLogs or ShutUp is detected; other features and foreign patches remain intact. With the updated ConfigManager, Logging - Mods shows the conflict reason and makes saved LTP log rules read-only while General settings remain editable.
+- Integrated logging and configuration management into the single patcher DLL.
+- Corrected the startup milestone label to `Patcher.Patch` while keeping its timing boundary unchanged.
+- Added managed and native integration regression coverage, including logging-only operation with all startup features disabled.
+- Debug builds deploy only the final patcher DLL to the local game when `DeployToGame=true`. Debug validation does not generate release ZIPs; release packaging remains a separate Release build.
+
 ## 1.2.5
 
 - Fixed scoped Harmony callback attribution when lifecycle calls are nested inside `ObjectDB.Awake` or `ZNetScene.Awake`, preserving outer callbacks and exclusive timing through nested and recursive phases.

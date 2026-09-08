@@ -14,6 +14,7 @@
     <FileAlignment>512</FileAlignment>
     <LangVersion>latest</LangVersion>
     <Nullable>enable</Nullable>
+    <DeployToGame Condition="'$(DeployToGame)' == ''">false</DeployToGame>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <PlatformTarget>AnyCPU</PlatformTarget>
@@ -81,6 +82,10 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="Patcher.cs" />
+    <Compile Include="ModConfiguration.cs" />
+    <Compile Include="ConfigAutoReload.cs" />
+    <Compile Include="ConfigManagerIntegration.cs" />
+    <Compile Include="LogFiltering.cs" />
     <Compile Include="ProfilerLog.cs" />
     <Compile Include="TimelineProfiler.cs" />
     <Compile Include="RuntimeEntrypoint.cs" />
@@ -99,13 +104,16 @@
   <ItemGroup>
     <Content Include="BuildReleasePackage.ps1" />
     <Content Include="README.md" />
+    <Content Include="VALIDATION.md" />
     <Content Include="Thunderstore\CHANGELOG.md" />
     <Content Include="Thunderstore\icon.png" />
     <Content Include="Thunderstore\manifest.json" />
     <Content Include="environment.props" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
-  <Target Name="CopyOutputDLL" AfterTargets="Build" Condition="'$(CopyOutputDLLPath)' != '' AND Exists('$(CopyOutputDLLPath)')">
+  <Target Name="CopyOutputDLL" AfterTargets="Build" Condition="'$(Configuration)' == 'Debug' AND '$(DeployToGame)' == 'true'">
+    <Error Condition="'$(CopyOutputDLLPath)' == ''" Text="DeployToGame requires a patcher destination in CopyOutputDLLPath." />
+    <MakeDir Directories="$(CopyOutputDLLPath)" />
     <Copy SourceFiles="$(TargetPath)" DestinationFolder="$(CopyOutputDLLPath)" OverwriteReadOnlyFiles="true" />
   </Target>
   <Target Name="PackageRelease" AfterTargets="Build" Condition="'$(Configuration)' == 'Release' AND '$(OS)' == 'Windows_NT' AND '$(SkipReleasePackage)' != 'true'">
